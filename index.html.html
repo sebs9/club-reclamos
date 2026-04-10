@@ -1,0 +1,1151 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Gestión de Reclamos — Club</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',sans-serif;background:#f8fafc}
+select,input,textarea,button{font-family:'DM Sans',sans-serif}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+// ── CONFIG ─────────────────────────────────────────────────────────────────
+const NOTIFY_EMAIL   = "edifalk@gmail.com";
+
+// Plazos de escalado por criticidad (días)
+const ESCALADO = {
+  urgente: { recordatorio: 1,  directivo: 2  },
+  alta:    { recordatorio: 2,  directivo: 4  },
+  media:   { recordatorio: 3,  directivo: 7  },
+  baja:    { recordatorio: 5,  directivo: 10 },
+};
+
+function getMailConfig() {
+  const cfg = ls.get("config") || {};
+  return {
+    intendencia: cfg.mailIntendencia || "",
+    admin:       cfg.mailAdmin       || "",
+    directivo:   cfg.mailDirectivo   || "",
+    scriptUrl:   cfg.scriptUrl       || SCRIPT_URL,
+  };
+}
+
+function isAdminCat(cat) {
+  return ["servicios","cuotas"].includes(cat);
+}
+
+function getResponsableMail(cat) {
+  const cfg = getMailConfig();
+  return isAdminCat(cat) ? cfg.admin : cfg.intendencia;
+}
+
+function diasDesde(isoDate) {
+  return (new Date() - new Date(isoDate)) / 86400000;
+}
+const ADMIN_PASSWORD = "intendencia2024";
+const SUPABASE_URL   = "https://pltfqosqinzufvjpiddr.supabase.co";
+const SUPABASE_KEY   = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBsdGZxb3NxaW56dWZ2anBpZGRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1MjA4NDksImV4cCI6MjA5MTA5Njg0OX0.d-EMCtfVqi6LvtbEdTBvH_ZaXiFJD6oXukPvMpbobXQ";
+const SCRIPT_URL     = "https://script.google.com/macros/s/AKfycbzZh2AxTboR13rjJeUdXSdO7jjUPkZcIPoeWFYUZynkyWkP6LjNbqQxVxpPIvT26Kh6/exec";
+
+const SECTORES_ADMIN = ["Administración"];
+const SECTORES_TODOS = [
+  "Cabina Control Entrada Campo","Covadonga Hall De Entrada","Cancha Playón Entrada Covadonga",
+  "Salón de Socios Confitería","Salón Canasta","Biblioteca Oficina Contaduría 1er piso",
+  "Salón Juvenil","Salón Presidente","Gimnasio Aparatos","Gimnasio Principal","Salón Yoga",
+  "Piletas","Área Lockers bajo Pileta","Espacio bajo pileta","Área Mesas Campo","Quincho",
+  "Playón Horreo","Plaza Juegos Infantiles","Consultorio Médico","Parque cercano al Vial Costero",
+  "Pasillo conexión Covadonga y Deportes","Cancha de Tejo","Cancha de Jockey",
+  "Pasillo Angosto y Largo Lado Deportes","Cancha Fútbol 11","Canchas Sintético",
+  "Playones semicubiertos Lado Deportes","Oficina Tenis","Estacionamiento",
+  "Puente Conexión Canchas de Fútbol","Chiringuito","Vestuarios General","Cancha de Bolos",
+  "Zona Parrillas","Oficina Estacionamiento","Zona Palestra","Baños Hall Entrada",
+  "Baños Canasta","Baños Campo","Baños Vestuarios","Baños Chiringuito",
+  "Pasillo Covadonga","Unidad Sanitaria","Administración"
+];
+// Sectores según categoría
+function getSectoresByCat(cat) {
+  if (["servicios","cuotas"].includes(cat)) return SECTORES_ADMIN;
+  return SECTORES_TODOS;
+}
+
+const TIPOS_SOL = [{id:"socio",label:"Socio",icon:"🏅"},{id:"empleado",label:"Empleado",icon:"👷"},{id:"directivo",label:"Directivo",icon:"🎖️"},{id:"no_socio",label:"No socio / Invitado",icon:"👤"}];
+
+// Grupos de sectores
+const GRUPOS_SECTOR = {
+  banos: ["Baños Hall Entrada","Baños Canasta","Baños Campo","Baños Vestuarios","Baños Chiringuito","Unidad Sanitaria","Vestuarios General"],
+  piletas: ["Piletas","Área Lockers bajo Pileta","Espacio bajo pileta"],
+  interiores: ["Salón de Socios Confitería","Salón Canasta","Biblioteca Oficina Contaduría 1er piso","Salón Juvenil","Salón Presidente","Gimnasio Aparatos","Gimnasio Principal","Salón Yoga","Quincho","Consultorio Médico","Oficina Tenis","Chiringuito","Oficina Estacionamiento","Covadonga Hall De Entrada","Cabina Control Entrada Campo"],
+  exteriores: ["Cancha Playón Entrada Covadonga","Área Mesas Campo","Playón Horreo","Plaza Juegos Infantiles","Parque cercano al Vial Costero","Pasillo conexión Covadonga y Deportes","Cancha de Tejo","Cancha de Jockey","Pasillo Angosto y Largo Lado Deportes","Cancha Fútbol 11","Canchas Sintético","Playones semicubiertos Lado Deportes","Estacionamiento","Puente Conexión Canchas de Fútbol","Cancha de Bolos","Zona Parrillas","Zona Palestra","Pasillo Covadonga"],
+  admin: ["Administración"],
+};
+
+function getGrupo(sector) {
+  for (const [g, list] of Object.entries(GRUPOS_SECTOR)) {
+    if (list.includes(sector)) return g;
+  }
+  return "interiores";
+}
+
+// Subcategorías dinámicas según categoría + grupo de sector
+const SUBS = {
+  infraestructura: {
+    banos:     ["Azulejos / revestimiento","Pisos","Paredes","Techos / filtraciones","Cerraduras / herrajes","Otro"],
+    piletas:   ["Estructura pileta","Pisos alrededor","Paredes","Techos / techo pileta","Otro"],
+    interiores:["Techos / filtraciones","Paredes / pintura","Pisos","Carpintería / aberturas","Cerraduras / herrajes","Iluminación","Otro"],
+    exteriores:["Pavimento / pisos exteriores","Cerco / alambrado","Iluminación exterior","Accesos / portones","Otro"],
+    admin:     ["Techos / filtraciones","Paredes / pintura","Pisos","Carpintería / aberturas","Otro"],
+  },
+  mantenimiento: {
+    banos:     ["Grifería / canillas","Inodoros / mingitorios","Desagüe / cañerías","Agua caliente / calefón","Ventilación","Iluminación","Otro"],
+    piletas:   ["Bomba / filtro","Química del agua","Desagüe","Iluminación pileta","Calefacción pileta","Otro"],
+    interiores:["Instalación eléctrica","Iluminación","Climatización","Puertas / ventanas","Instalación sanitaria","Ascensor","Otro"],
+    exteriores:["Riego","Iluminación exterior","Drenaje / desagüe","Cerco / alambrado","Accesos / portones","Otro"],
+    admin:     ["Equipos de oficina","Instalación eléctrica","Climatización","Iluminación","Otro"],
+  },
+  limpieza: {
+    default:   ["Limpieza general","Higiene y desinfección","Residuos / contenedores","Olores","Plagas","Otro"],
+  },
+  equipamiento: {
+    default:   ["Mobiliario","Electrodomésticos","Equipos deportivos","Equipos de cocina","Equipos audiovisuales","Señalización","Otro"],
+  },
+  preparacion: {
+    default:   ["Montaje de salón / evento","Armado de cancha","Preparación de vestuarios","Decoración / señalización","Otro"],
+  },
+  servicios: {
+    default:   ["Atención al socio","Reserva de instalaciones","Actividades y clases","Acceso y credenciales","Comunicación del club","Otro"],
+  },
+  cuotas: {
+    default:   ["Cobro incorrecto","Débito no procesado","Solicitud de beca / descuento","Consulta de estado de cuenta","Otro"],
+  },
+};
+
+function getSubcategorias(cat, sector) {
+  const catSubs = SUBS[cat];
+  if (!catSubs) return ["Otro"];
+  if (catSubs.default) return catSubs.default;
+  const grupo = getGrupo(sector);
+  return catSubs[grupo] || catSubs.interiores || ["Otro"];
+}
+
+const CATS = {
+  infraestructura:{id:"infraestructura",label:"Infraestructura",icon:"🏗️",resp:{nombre:"Gustavo García",mail:"gustavo.garcia@club.com.ar"}},
+  limpieza:{id:"limpieza",label:"Limpieza",icon:"🧹",resp:{nombre:"— Por configurar —",mail:""}},
+  mantenimiento:{id:"mantenimiento",label:"Mantenimiento",icon:"🔧",resp:{nombre:"— Por configurar —",mail:""}},
+  equipamiento:{id:"equipamiento",label:"Equipamiento",icon:"⚙️",resp:{nombre:"— Por configurar —",mail:""}},
+  preparacion:{id:"preparacion",label:"Preparación de espacio",icon:"📋",resp:{nombre:"— Por configurar —",mail:""}},
+  servicios:{id:"servicios",label:"Servicios & Atención",icon:"🤝",resp:{nombre:"— Por configurar —",mail:""}},
+  cuotas:{id:"cuotas",label:"Cuotas & Aranceles",icon:"💳",resp:{nombre:"— Por configurar —",mail:""}},
+};
+
+const PRIS = [{id:"urgente",label:"Urgente",color:"#ef4444",dias:1},{id:"alta",label:"Alta",color:"#f97316",dias:3},{id:"media",label:"Media",color:"#eab308",dias:7},{id:"baja",label:"Baja",color:"#22c55e",dias:14}];
+
+const ESTADOS = [{id:"no_iniciada",label:"No iniciada",color:"#6b7280"},{id:"iniciada",label:"Iniciada",color:"#3b82f6"},{id:"postergada",label:"Postergada",color:"#f97316"},{id:"suspendida",label:"Suspendida",color:"#ef4444"},{id:"demorada",label:"Demorada",color:"#dc2626"},{id:"completada",label:"Completada",color:"#22c55e"},{id:"consolidada",label:"Consolidada",color:"#8b5cf6"}];
+
+// ── HELPERS ────────────────────────────────────────────────────────────────
+const fd  = iso => iso ? new Date(iso).toLocaleDateString("es-AR",{day:"2-digit",month:"2-digit",year:"numeric"}) : "—";
+const fdt = iso => iso ? new Date(iso).toLocaleString("es-AR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}) : "—";
+
+function getTiming(r) {
+  if (["completada","consolidada"].includes(r.estadoAvance)) return null;
+  if (!r.fechaCierre) return null;
+  const d = (new Date(r.fechaCierre) - new Date()) / 86400000;
+  if (d < 0)  return {label:"Vencido",    color:"#ef4444", bg:"#fef2f2"};
+  if (d < 1)  return {label:"Vence hoy",  color:"#f97316", bg:"#fff7ed"};
+  if (d < 5)  return {label:"Por vencer", color:"#eab308", bg:"#fefce8"};
+  return {label:"A tiempo", color:"#22c55e", bg:"#f0fdf4"};
+}
+
+// ── LOCAL STORE ────────────────────────────────────────────────────────────
+const ls = {
+  get: k => { try { const v=localStorage.getItem(k); return v?JSON.parse(v):null; } catch{return null;} },
+  set: (k,v) => { try { localStorage.setItem(k,JSON.stringify(v)); } catch{} },
+};
+
+// ── SUPABASE ───────────────────────────────────────────────────────────────
+const SB_HEADERS = {
+  "Content-Type":"application/json",
+  "apikey": SUPABASE_KEY,
+  "Authorization": "Bearer "+SUPABASE_KEY,
+};
+
+async function sbGetAll() {
+  try {
+    const r = await fetch(SUPABASE_URL+"/rest/v1/reclamos?select=data&order=created_at.desc", {headers: SB_HEADERS});
+    const rows = await r.json();
+    console.log("sbGetAll:", rows.length, "rows");
+    return Array.isArray(rows) ? rows.map(r=>r.data) : [];
+  } catch(e) { console.error("sbGetAll error:", e); return []; }
+}
+
+async function sbUpsert(rec) {
+  try {
+    const r = await fetch(SUPABASE_URL+"/rest/v1/reclamos", {
+      method: "POST",
+      headers: {...SB_HEADERS, "Prefer":"resolution=merge-duplicates,return=minimal"},
+      body: JSON.stringify({id: rec.id, data: rec}),
+    });
+    console.log("sbUpsert status:", r.status, rec.numero);
+  } catch(e) { console.error("sbUpsert error:", e); }
+}
+
+// ── SUPABASE STORAGE ──────────────────────────────────────────────────────
+async function sbUploadFile(file, path) {
+  try {
+    // Convert base64 to blob
+    const res = await fetch(file.data);
+    const blob = await res.blob();
+    const uploadRes = await fetch(
+      `${SUPABASE_URL}/storage/v1/object/reclamos-adjuntos/${path}`,
+      {
+        method: "POST",
+        headers: {
+          "apikey": SUPABASE_KEY,
+          "Authorization": "Bearer "+SUPABASE_KEY,
+          "Content-Type": file.tipo||"application/octet-stream",
+          "x-upsert": "true",
+        },
+        body: blob,
+      }
+    );
+    if (uploadRes.ok) {
+      const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/reclamos-adjuntos/${path}`;
+      console.log("Uploaded:", publicUrl);
+      return publicUrl;
+    } else {
+      const err = await uploadRes.text();
+      console.error("Upload error:", err);
+      return null;
+    }
+  } catch(e) { console.error("Upload exception:", e); return null; }
+}
+
+async function uploadAdjuntos(adjuntos, reclamoId, prefijo) {
+  const urls = [];
+  for (const [i, adj] of adjuntos.entries()) {
+    if (!adj.data) { urls.push({nombre:adj.nombre,url:adj.url||null,tipo:adj.tipo}); continue; }
+    const ext = adj.nombre.split('.').pop()||"jpg";
+    const path = `${prefijo}/${reclamoId}/${i}-${Date.now()}.${ext}`;
+    const url = await sbUploadFile(adj, path);
+    urls.push({nombre:adj.nombre, url, tipo:adj.tipo});
+  }
+  return urls;
+}
+
+// ── EMAIL ──────────────────────────────────────────────────────────────────
+async function sendEmail({to, cc, subject, body}) {
+  const cfg = ls.get("config") || {};
+  const url = cfg.scriptUrl || SCRIPT_URL;
+  const toArr = (Array.isArray(to)?to:[to]).filter(Boolean);
+  const ccArr = cc?(Array.isArray(cc)?cc:[cc]).filter(Boolean):[];
+  try {
+    const r = await fetch(url, {method:"POST", headers:{"Content-Type":"text/plain"}, body:JSON.stringify({to:toArr,cc:ccArr,subject,body})});
+    const d = await r.json();
+    console.log("Email:", d);
+    return d;
+  } catch(e) { console.error("Email error:", e); return {sent:false}; }
+}
+
+// ── REACT HELPERS ──────────────────────────────────────────────────────────
+const {createElement:h, useState, useEffect, useRef, Fragment} = React;
+
+function Badge({color, bg, label, sm}) {
+  return h('span', {style:{display:"inline-block",padding:sm?"2px 8px":"3px 10px",borderRadius:20,fontSize:sm?11:12,fontWeight:600,color,background:bg||color+"22",whiteSpace:"nowrap"}}, label);
+}
+
+// ── FORMULARIO SOCIO ───────────────────────────────────────────────────────
+function FormularioSocio({onSubmit, reclamos}) {
+  const [f,setF] = useState({tipo:"",nombre:"",celular:"",email:"",sector:"",cat:"",sub:"",pri:"media",desc:"",ubicacion:"",adjuntos:[]});
+  const [done,setDone] = useState(false);
+  const [num,setNum] = useState("");
+  const [err,setErr] = useState({});
+  const [dup,setDup] = useState(null);
+  const [sending,setSending] = useState(false);
+  const fileRef = useRef();
+
+  const set = (k,v) => {
+    let extra = {};
+    if (k==="cat") {
+      extra = {sub:"", sector:""};
+      // Auto-assign sector for admin categories
+      if (["servicios","cuotas"].includes(v)) extra.sector = "Administración";
+    }
+    setF(p => ({...p,[k]:v,...extra}));
+    const sec = k==="sector"?v : (extra.sector||f.sector);
+    const cat = k==="cat"?v:f.cat;
+    if (sec&&cat) {
+      const d=reclamos.find(r=>r.sector===sec&&r.cat===cat&&!["completada","consolidada"].includes(r.estadoAvance));
+      setDup(d||null);
+    }
+  };
+
+  const validate = () => {
+    const e={};
+    if(!f.tipo) e.tipo=true; if(!f.nombre.trim()) e.nombre=true;
+    if(!f.email.trim()) e.email=true;
+    if(!f.cat) e.cat=true;
+    if(!["servicios","cuotas"].includes(f.cat) && !f.sector) e.sector=true;
+    if((f.sector||["servicios","cuotas"].includes(f.cat)) && !f.sub) e.sub=true;
+    if(!f.desc.trim()) e.desc=true;
+    setErr(e); return !Object.keys(e).length;
+  };
+
+  const submit = async () => {
+    if (!validate()) return;
+    setSending(true);
+    const n = "R-"+Date.now().toString().slice(-6);
+    setNum(n);
+    const catConf=CATS[f.cat], pri=PRIS.find(p=>p.id===f.pri);
+    const dC=new Date(); dC.setDate(dC.getDate()+(pri?.dias||7));
+    const rec = {...f, numero:n, id:Date.now(), createdAt:new Date().toISOString(),
+      estadoAvance:"no_iniciada", fechaCierre:dC.toISOString().split("T")[0],
+      responsableArea:catConf?.resp||{nombre:"",mail:""},
+      comentarios:[], descripcionResolucion:"", presupuesto:"", presupuestoDetalle:"",
+      ejecutorMail:"", ejecutorNombre:"", ejecutorConfirmado:false, ejecutorRechazado:false,
+      evidenciaUrl:"", adjuntosResolucion:[]};
+    // Upload adjuntos to Supabase Storage
+    if(rec.adjuntos && rec.adjuntos.length > 0) {
+      const urls = await uploadAdjuntos(rec.adjuntos, rec.id, "formulario");
+      rec.adjuntos = urls;
+    }
+    await onSubmit(rec);
+    const appUrl = window.location.href.split("?")[0];
+    const seguimientoUrl = appUrl+"?seguimiento="+n;
+    // Email a intendencia
+    await sendEmail({to:NOTIFY_EMAIL, subject:`[Club] Nuevo reclamo ${n} — ${f.sector}`,
+      body:`Nuevo reclamo registrado.\n\nNúmero: ${n}\nSolicitante: ${f.tipo} — ${f.nombre}\nCelular: ${f.celular||"—"}\nEmail: ${f.email||"—"}\nSector: ${f.sector}${f.ubicacion?`\nUbicación exacta: ${f.ubicacion}`:""}\nTipo: ${catConf?.label} › ${f.sub}\nPrioridad: ${pri?.label}\nDescripción: ${f.desc}`});
+    // Email de confirmación al usuario
+    if(f.email) {
+      await sendEmail({to:f.email, subject:`[Club] Recibimos tu reclamo — ${n}`,
+        body:`Hola ${f.nombre},\n\nRecibimos tu reclamo y ya está siendo procesado por el equipo de intendencia.\n\nNúmero de reclamo: ${n}\nSector: ${f.sector}\nProblema: ${catConf?.label} › ${f.sub}\nDescripción: ${f.desc}\n\nPodés seguir el estado de tu reclamo en cualquier momento acá:\n${seguimientoUrl}\n\nTe notificaremos cuando haya novedades.\n\n— Equipo de Intendencia`});
+    }
+    setSending(false); setDone(true);
+  };
+
+  if (done) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
+    h('div',{style:{background:"white",borderRadius:20,padding:40,maxWidth:420,width:"100%",textAlign:"center",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}},
+      h('div',{style:{fontSize:64,marginBottom:16}},"✅"),
+      h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:26,color:"#0f172a",margin:"0 0 8px"}},"Reclamo registrado"),
+      h('p',{style:{color:"#64748b",marginBottom:24,fontSize:15}},"Tu solicitud fue recibida por el equipo de intendencia."),
+      h('div',{style:{background:"#f0fdf4",border:"2px solid #22c55e",borderRadius:12,padding:"16px 24px",marginBottom:24}},
+        h('div',{style:{fontSize:12,color:"#64748b",letterSpacing:1,textTransform:"uppercase",marginBottom:4}},"Número de reclamo"),
+        h('div',{style:{fontSize:28,fontWeight:800,color:"#15803d",fontFamily:"monospace"}},num)),
+      h('p',{style:{fontSize:13,color:"#94a3b8"}},"Guardá este número para hacer seguimiento."),
+      h('button',{onClick:()=>{setDone(false);setF({tipo:"",nombre:"",celular:"",email:"",sector:"",cat:"",sub:"",pri:"media",desc:"",ubicacion:"",adjuntos:[]});setDup(null);},
+        style:{marginTop:20,padding:"10px 28px",background:"#0f172a",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:600}},"Nuevo reclamo")));
+
+  const catConf = CATS[f.cat];
+  const iS = er => ({width:"100%",padding:"11px 14px",borderRadius:10,border:er?"2px solid #ef4444":"2px solid rgba(255,255,255,0.15)",background:"rgba(255,255,255,0.1)",color:er?"#fca5a5":"white",fontSize:14,outline:"none",boxSizing:"border-box"});
+  const lbl = (text,er) => h('label',{style:{display:"block",fontSize:12,fontWeight:600,color:er?"#f87171":"#93c5fd",letterSpacing:1,textTransform:"uppercase",marginBottom:8}},text);
+
+  return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",padding:"20px 16px 80px"}},
+    h('div',{style:{textAlign:"center",marginBottom:24,paddingTop:20}},
+      h('div',{style:{fontSize:11,letterSpacing:3,color:"#93c5fd",textTransform:"uppercase",marginBottom:8}},"Sistema de Gestión"),
+      h('h1',{style:{fontFamily:"'Playfair Display',serif",fontSize:28,color:"white",fontWeight:900}},"Reportar un Problema"),
+      h('div',{style:{width:40,height:3,background:"#3b82f6",margin:"10px auto 0",borderRadius:2}})),
+    h('div',{style:{maxWidth:500,margin:"0 auto"}},
+      h('div',{style:{background:"rgba(255,255,255,0.05)",borderRadius:16,padding:"22px 18px"}},
+        // Tipo solicitante
+        h('div',{style:{marginBottom:18}},
+          lbl("¿Quién sos? *",err.tipo),
+          h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}},
+            ...TIPOS_SOL.map(t=>h('button',{key:t.id,onClick:()=>set("tipo",t.id),
+              style:{padding:"10px 12px",borderRadius:10,border:f.tipo===t.id?"2px solid #3b82f6":"2px solid rgba(255,255,255,0.15)",background:f.tipo===t.id?"rgba(59,130,246,0.25)":"rgba(255,255,255,0.07)",color:"white",cursor:"pointer",fontSize:13,fontWeight:500,textAlign:"left"}},
+              t.icon+" "+t.label)))),
+        // Nombre
+        h('div',{style:{marginBottom:12}},lbl("Nombre y apellido *",err.nombre),h('input',{value:f.nombre,onChange:e=>set("nombre",e.target.value),placeholder:"Tu nombre completo",style:iS(err.nombre)})),
+        h('div',{style:{marginBottom:12}},lbl("Email *",err.email),h('input',{value:f.email,onChange:e=>set("email",e.target.value),placeholder:"Para recibir novedades y seguimiento",style:iS(err.email),type:"email"})),
+        h('div',{style:{marginBottom:18}},
+          lbl("WhatsApp (opcional)"),
+          h('div',{style:{position:"relative"}},
+            h('span',{style:{position:"absolute",left:14,top:"50%",transform:"translateY(-50%)",fontSize:16}},"📱"),
+            h('input',{value:f.celular,onChange:e=>set("celular",e.target.value),placeholder:"Ej: 11-1234-5678",style:{...iS(false),paddingLeft:38},type:"tel"}))),
+        h('div',{style:{height:1,background:"rgba(255,255,255,0.1)",marginBottom:18}}),
+        // Duplicado warning
+        dup && h('div',{style:{background:"rgba(234,179,8,0.15)",border:"1.5px solid #eab308",borderRadius:10,padding:"12px 16px",marginBottom:16}},
+          h('div',{style:{color:"#fbbf24",fontWeight:700,fontSize:13,marginBottom:4}},"⚠️ Ya existe un reclamo similar abierto"),
+          h('div',{style:{color:"#fcd34d",fontSize:12}},dup.numero+" · "+dup.sector+". Podés continuar si el problema es diferente.")),
+        // Categoría PRIMERO
+        h('div',{style:{marginBottom:14}},lbl("Tipo de problema *",err.cat),
+          h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}},
+            ...Object.values(CATS).map(c=>h('button',{key:c.id,onClick:()=>set("cat",c.id),
+              style:{padding:"9px 10px",borderRadius:10,border:f.cat===c.id?"2px solid #3b82f6":"2px solid rgba(255,255,255,0.15)",background:f.cat===c.id?"rgba(59,130,246,0.25)":"rgba(255,255,255,0.07)",color:"white",cursor:"pointer",fontSize:12,fontWeight:500,textAlign:"left"}},
+              c.icon+" "+c.label)))),
+        // Sector DESPUÉS - dinámico según categoría
+        f.cat && h('div',{style:{marginBottom:14}},
+          ["servicios","cuotas"].includes(f.cat)
+            ? h('div',{style:{background:"rgba(59,130,246,0.15)",border:"1.5px solid rgba(59,130,246,0.3)",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#93c5fd"}},"📍 Sector asignado automáticamente: Administración")
+            : h('div',null,
+                lbl("Sector *",err.sector),
+                h('select',{value:f.sector,onChange:e=>set("sector",e.target.value),style:{...iS(err.sector),color:f.sector?"white":"#94a3b8"}},
+                  h('option',{value:"",style:{color:"#333"}},"Seleccioná el sector..."),
+                  ...getSectoresByCat(f.cat).map(s=>h('option',{key:s,value:s,style:{color:"#333"}},s))))),
+        // Subcategoría
+        f.cat && (f.sector || ["servicios","cuotas"].includes(f.cat)) && h('div',{style:{marginBottom:14}},lbl("Detalle del problema *",err.sub),
+          h('select',{value:f.sub,onChange:e=>set("sub",e.target.value),style:{...iS(err.sub),color:f.sub?"white":"#94a3b8"}},
+            h('option',{value:"",style:{color:"#333"}},"Seleccioná una opción..."),
+            ...getSubcategorias(f.cat, f.sector||"Administración").map(s=>h('option',{key:s,value:s,style:{color:"#333"}},s)))),
+        // Urgencia
+        h('div',{style:{marginBottom:14}},lbl("Urgencia"),
+          h('div',{style:{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6}},
+            ...PRIS.map(p=>h('button',{key:p.id,onClick:()=>set("pri",p.id),
+              style:{padding:"8px 4px",borderRadius:8,border:f.pri===p.id?`2px solid ${p.color}`:"2px solid rgba(255,255,255,0.15)",background:f.pri===p.id?p.color+"33":"rgba(255,255,255,0.07)",color:f.pri===p.id?p.color:"#94a3b8",cursor:"pointer",fontSize:11,fontWeight:600}},
+              p.label)))),
+        // Descripción
+        h('div',{style:{marginBottom:14}},lbl("Descripción *",err.desc),
+          h('textarea',{value:f.desc,onChange:e=>set("desc",e.target.value),rows:4,placeholder:"Describí el problema con el mayor detalle posible...",style:{...iS(err.desc),resize:"vertical"}})),
+        h('div',{style:{marginBottom:14}},lbl("Ubicación exacta (opcional)"),
+          h('input',{value:f.ubicacion,onChange:e=>set("ubicacion",e.target.value),placeholder:"Ej: Vestuario masculino, canilla del fondo",style:iS(false)})),
+        // Adjuntos
+        h('div',{style:{marginBottom:22}},lbl("Foto / video del problema"),
+          h('input',{ref:fileRef,type:"file",accept:"image/*,video/*",multiple:true,style:{display:"none"},onChange:e=>{Array.from(e.target.files).forEach(file=>{const r=new FileReader();r.onload=ev=>setF(p=>({...p,adjuntos:[...p.adjuntos,{nombre:file.name,tipo:file.type,data:ev.target.result}]}));r.readAsDataURL(file);});e.target.value="";},capture:"environment"}),
+          h('div',{style:{display:"flex",gap:8,flexWrap:"wrap",marginBottom:f.adjuntos.length?8:0}},
+            ...f.adjuntos.map((a,i)=>h('div',{key:i,style:{display:"flex",alignItems:"center",gap:6,background:"rgba(255,255,255,0.1)",borderRadius:8,padding:"5px 10px",fontSize:12}},
+              h('span',null,a.tipo?.startsWith("video")?"🎥":"📷"),
+              a.url ? h('a',{href:a.url,target:"_blank",style:{color:"#93c5fd",maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:12}},a.nombre)
+                    : h('span',{style:{color:"white",maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},a.nombre),
+              h('button',{onClick:()=>setF(p=>({...p,adjuntos:p.adjuntos.filter((_,idx)=>idx!==i)})),style:{background:"none",border:"none",cursor:"pointer",color:"#ef4444",fontSize:14,padding:0}},"✕")))),
+          h('button',{onClick:()=>fileRef.current.click(),style:{padding:"9px 16px",borderRadius:9,border:"1.5px dashed rgba(255,255,255,0.25)",background:"transparent",color:"#94a3b8",cursor:"pointer",fontSize:13}},"📎 Adjuntar foto / video")),
+        // Submit
+        h('button',{onClick:submit,disabled:sending,style:{width:"100%",padding:"15px",background:sending?"#475569":"linear-gradient(135deg,#3b82f6,#1d4ed8)",color:"white",border:"none",borderRadius:12,fontSize:16,fontWeight:700,cursor:sending?"not-allowed":"pointer"}},sending?"Enviando...":"Enviar Reclamo →"))));
+}
+
+// ── PANTALLA RECHAZO ───────────────────────────────────────────────────────
+function PantallaRechazo({onConfirm}) {
+  const [motivo,setMotivo] = useState("");
+  const [err,setErr] = useState(false);
+  const pending = ls.get("pendingRechazar");
+  const rec = pending?.rec;
+  const submit = () => { if(!motivo.trim()){setErr(true);return;} onConfirm(motivo.trim()); };
+  return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
+    h('div',{style:{background:"white",borderRadius:20,padding:36,maxWidth:460,width:"100%",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}},
+      h('div',{style:{fontSize:48,textAlign:"center",marginBottom:12}},"❌"),
+      h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:24,color:"#0f172a",margin:"0 0 8px",textAlign:"center"}},"Rechazar tarea"),
+      rec && h('div',{style:{background:"#f8fafc",borderRadius:12,padding:14,marginBottom:20,fontSize:13}},
+        h('div',{style:{fontWeight:600,color:"#1e293b",marginBottom:4}},rec.numero+" — "+rec.sector),
+        h('div',{style:{color:"#64748b"}},rec.desc)),
+      h('div',{style:{marginBottom:20}},
+        h('label',{style:{display:"block",fontSize:12,fontWeight:600,color:err?"#ef4444":"#374151",marginBottom:8,textTransform:"uppercase",letterSpacing:0.5}},"Motivo del rechazo *"),
+        h('textarea',{value:motivo,onChange:e=>{setMotivo(e.target.value);setErr(false);},rows:4,placeholder:"Explicá por qué no podés asumir esta tarea...",style:{width:"100%",padding:"12px 14px",borderRadius:10,border:err?"2px solid #ef4444":"1.5px solid #e2e8f0",fontSize:14,resize:"vertical",outline:"none",boxSizing:"border-box"}}),
+        err && h('div',{style:{color:"#ef4444",fontSize:12,marginTop:4}},"El motivo es obligatorio")),
+      h('button',{onClick:submit,style:{width:"100%",padding:"14px",background:"linear-gradient(135deg,#ef4444,#dc2626)",color:"white",border:"none",borderRadius:12,fontSize:15,fontWeight:700,cursor:"pointer"}},"Confirmar rechazo")));
+}
+
+// ── MODAL GESTIÓN ──────────────────────────────────────────────────────────
+function EditModal({rec, onClose, onSave, ejecutores}) {
+  const [tab,setTab] = useState("gestion");
+  const yaFueAsignado = !!(rec.ejecutorMailOriginal || rec.fechaInicioOriginal);
+  const [f,setF] = useState({
+    estadoAvance:rec.estadoAvance||"no_iniciada", criticidad:rec.criticidad||"",
+    fechaInicioEsperado:rec.fechaInicioEsperado||"", fechaCierre:rec.fechaCierre||"",
+    ejecutorMail:rec.ejecutorMail||"", ejecutorNombre:rec.ejecutorNombre||"",
+    presupuesto:rec.presupuesto||"", presupuestoDetalle:rec.presupuestoDetalle||"",
+    descripcionResolucion:rec.descripcionResolucion||"", evidenciaUrl:rec.evidenciaUrl||"",
+    nuevoComentario:"",
+    // Campos de actualización de fecha (cuando ya fue asignado)
+    fechaInicioActualizada:rec.fechaInicioActualizada||"",
+    fechaCierreActualizada:rec.fechaCierreActualizada||"",
+    motivoActualizacion:rec.motivoActualizacion||"",
+    adjuntosResolucion:rec.adjuntosResolucion||[],
+    reclamoPadre:rec.reclamoPadre||"",
+  });
+  const [saveErr,setSaveErr] = useState("");
+  const [sending,setSending] = useState(false);
+  const fileRef = useRef();
+  const set = (k,v) => setF(p=>({...p,[k]:v}));
+  const cat = CATS[rec.cat]; const pri = PRIS.find(p=>p.id===rec.pri); const t = getTiming(rec);
+  const aS = () => ({width:"100%",padding:"10px 14px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:14,outline:"none",boxSizing:"border-box"});
+
+  const selectEj = mail => { const ej=ejecutores.find(e=>e.mail===mail); set("ejecutorMail",mail); if(ej) set("ejecutorNombre",ej.nombre); };
+
+  const save = async () => {
+    setSaveErr("");
+    // Validate required fields for assignment
+    if(tab==="asignacion" || tab==="gestion") {
+      if(!f.ejecutorMail) { setSaveErr("Debés asignar un ejecutor antes de guardar."); return; }
+      if(!f.fechaInicioEsperado && !rec.fechaInicioOriginal) { setSaveErr("La fecha de inicio es obligatoria."); return; }
+      if(!f.fechaCierre && !rec.fechaOriginalCierre) { setSaveErr("La fecha de cierre es obligatoria."); return; }
+      if(!f.criticidad) { setSaveErr("Debés asignar una criticidad."); return; }
+    }
+    setSending(true);
+    const comentarios=[...(rec.comentarios||[])];
+    if(f.nuevoComentario.trim()) comentarios.push({texto:f.nuevoComentario.trim(),fecha:new Date().toISOString(),autor:"Intendencia"});
+
+    // Lock original dates on first save
+    const fechaInicioOriginal = rec.fechaInicioOriginal || f.fechaInicioEsperado;
+    const fechaOriginalCierre = rec.fechaOriginalCierre || f.fechaCierre;
+    const ejecutorMailOriginal = rec.ejecutorMailOriginal || (f.ejecutorMail !== rec.ejecutorMail ? f.ejecutorMail : rec.ejecutorMailOriginal);
+
+    const fechaAsignacion = (f.ejecutorMail && f.ejecutorMail!==rec.ejecutorMail) ? new Date().toISOString() : rec.fechaAsignacion;
+    if(f.ejecutorMail && f.ejecutorMail!==rec.ejecutorMail){
+      const appUrl=window.location.href.split("?")[0];
+      const cc=[NOTIFY_EMAIL,rec.responsableArea?.mail].filter(e=>e&&e!==f.ejecutorMail);
+      await sendEmail({to:f.ejecutorMail,cc,
+        subject:`[Club] Tarea asignada — ${rec.numero}: ${rec.sector}`,
+        body:`Hola ${f.ejecutorNombre},\n\nSe te asignó la siguiente tarea:\n\nNúmero: ${rec.numero}\nSector: ${rec.sector}\nProblema: ${cat?.label} › ${rec.sub}\nDescripción: ${rec.desc}\nFecha de cierre: ${fd(f.fechaCierre)}\n\n✅ CONFIRMAR:\n${appUrl}?confirmar=${rec.id}\n\n❌ RECHAZAR:\n${appUrl}?rechazar=${rec.id}\n\nSi no respondés en 24hs el sistema notificará al responsable.`});
+    }
+    const fechaCierreConfirmada = f.fechaCierre ? f.fechaCierre : rec.fechaCierreConfirmada||null;
+    // Upload new adjuntosResolucion that still have base64 data
+    let adjuntosResolucion = f.adjuntosResolucion || [];
+    const newAdjuntos = adjuntosResolucion.filter(a=>a.data);
+    if(newAdjuntos.length > 0) {
+      const uploaded = await uploadAdjuntos(adjuntosResolucion, rec.id, "resolucion");
+      adjuntosResolucion = uploaded;
+    }
+    await onSave({...rec,...f,adjuntosResolucion,comentarios,nuevoComentario:undefined,
+      fechaCierreConfirmada,fechaInicioOriginal,fechaOriginalCierre,ejecutorMailOriginal,fechaAsignacion,
+      updatedAt:new Date().toISOString()});
+    setSending(false);
+  };
+
+  const notifResolucion = async () => {
+    setSending(true);
+    const appUrl=window.location.href.split("?")[0];
+    await sendEmail({to:[rec.responsableArea?.mail,NOTIFY_EMAIL].filter(Boolean),
+      subject:`[Club] ✅ Tarea completada — ${rec.numero}: ${rec.sector}`,
+      body:`Tarea completada.\n\nNúmero: ${rec.numero}\nSector: ${rec.sector}\nEjecutor: ${rec.ejecutorNombre||"—"}\nDescripción: ${f.descripcionResolucion||"—"}\nCosto: ${f.presupuesto?"$"+Number(f.presupuesto).toLocaleString("es-AR"):"—"}\n${f.evidenciaUrl?"Evidencia: "+f.evidenciaUrl:""}`});
+    setSending(false); alert("✅ Notificación enviada.");
+  };
+
+  const TABS = [["gestion","Gestión"],["asignacion","Asignación"],["resolucion","Resolución"],["historial","Historial"]];
+
+  return h('div',{style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20,overflowY:"auto"}},
+    h('div',{style:{background:"white",borderRadius:20,width:"100%",maxWidth:580,maxHeight:"93vh",overflowY:"auto"}},
+      // Header
+      h('div',{style:{background:"#0f172a",padding:"18px 24px",borderRadius:"20px 20px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center"}},
+        h('div',null,
+          h('div',{style:{fontSize:11,color:"#60a5fa",letterSpacing:2,textTransform:"uppercase"}},"Gestionar Reclamo"),
+          h('div',{style:{color:"white",fontSize:18,fontWeight:700,fontFamily:"'Playfair Display',serif"}},rec.numero+" — "+rec.sector)),
+        h('div',{style:{display:"flex",gap:8,alignItems:"center"}},
+          t && h(Badge,{color:t.color,bg:t.bg,label:t.label,sm:true}),
+          h('button',{onClick:onClose,style:{background:"none",border:"none",color:"#94a3b8",fontSize:22,cursor:"pointer"}},"✕"))),
+      // Tabs
+      h('div',{style:{display:"flex",borderBottom:"2px solid #f1f5f9",padding:"0 20px",overflowX:"auto"}},
+        ...TABS.map(([id,lbl])=>h('button',{key:id,onClick:()=>setTab(id),
+          style:{padding:"11px 14px",border:"none",background:"none",cursor:"pointer",fontSize:13,fontWeight:tab===id?700:500,color:tab===id?"#0f172a":"#94a3b8",borderBottom:tab===id?"2px solid #3b82f6":"2px solid transparent",marginBottom:-2,whiteSpace:"nowrap"}},lbl))),
+      h('div',{style:{padding:"18px 22px"}},
+        // Info card
+        h('div',{style:{background:"#f8fafc",borderRadius:12,padding:14,marginBottom:16,fontSize:13}},
+          h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:10}},
+            h('div',null,h('div',{style:{fontSize:10,color:"#94a3b8",fontWeight:600,marginBottom:2}},"TIPO"),cat?.icon+" "+cat?.label),
+            h('div',null,h('div',{style:{fontSize:10,color:"#94a3b8",fontWeight:600,marginBottom:2}},"DETALLE"),rec.sub),
+            h('div',null,h('div',{style:{fontSize:10,color:"#94a3b8",fontWeight:600,marginBottom:2}},"PRIORIDAD"),h(Badge,{color:pri?.color,label:pri?.label,sm:true})),
+            h('div',null,h('div',{style:{fontSize:10,color:"#94a3b8",fontWeight:600,marginBottom:2}},"SOLICITANTE"),rec.tipo+" — "+rec.nombre),
+            h('div',null,h('div',{style:{fontSize:10,color:"#94a3b8",fontWeight:600,marginBottom:2}},"CELULAR"),rec.celular||"—"),
+            h('div',null,h('div',{style:{fontSize:10,color:"#94a3b8",fontWeight:600,marginBottom:2}},"INGRESO"),fd(rec.createdAt))),
+          h('div',null,h('div',{style:{fontSize:10,color:"#94a3b8",fontWeight:600,marginBottom:3}},"DESCRIPCIÓN"),h('div',{style:{color:"#475569",lineHeight:1.5}},rec.desc)),
+          rec.responsableArea?.nombre && h('div',{style:{marginTop:8,fontSize:12,color:"#64748b"}},"👔 "+rec.responsableArea.nombre),
+          rec.ejecutorRechazado ? h('div',{style:{marginTop:4,fontSize:12,color:"#dc2626",fontWeight:600}},"❌ Rechazada — acción requerida")
+          : rec.ejecutorConfirmado ? h('div',{style:{marginTop:4,fontSize:12,color:"#22c55e",fontWeight:600}},"✅ Confirmada: "+rec.ejecutorNombre+" — "+fdt(rec.fechaConfirmacion))
+          : rec.ejecutorMail ? h('div',{style:{marginTop:4,fontSize:12,color:"#1d4ed8",fontWeight:600}},"⏳ Esperando confirmación: "+rec.ejecutorNombre)
+          : null),
+
+        // TAB GESTIÓN
+        tab==="gestion" && h('div',null,
+          h('div',{style:{marginBottom:14}},
+            h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:0.5}},"Estado de avance"),
+            h('div',{style:{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6}},
+              ...ESTADOS.map(e=>h('button',{key:e.id,onClick:()=>set("estadoAvance",e.id),
+                style:{padding:"8px 6px",borderRadius:8,border:f.estadoAvance===e.id?`2px solid ${e.color}`:"2px solid #e2e8f0",background:f.estadoAvance===e.id?e.color+"18":"white",color:f.estadoAvance===e.id?e.color:"#64748b",cursor:"pointer",fontSize:12,fontWeight:600}},e.label)))),
+          h('div',{style:{marginBottom:14}},
+            h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:0.5}},"Criticidad (intendencia)"),
+            h('div',{style:{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6}},
+              ...PRIS.map(p=>h('button',{key:p.id,onClick:()=>set("criticidad",p.id),
+                style:{padding:"8px 4px",borderRadius:8,border:f.criticidad===p.id?`2px solid ${p.color}`:"2px solid #e2e8f0",background:f.criticidad===p.id?p.color+"18":"white",color:f.criticidad===p.id?p.color:"#64748b",cursor:"pointer",fontSize:11,fontWeight:600}},p.label)))),
+          rec.fechaInicioOriginal
+            ? h('div',{style:{marginBottom:14}},
+                h('div',{style:{background:"#f8fafc",borderRadius:10,padding:12,marginBottom:10,fontSize:13}},
+                  h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}},
+                    h('div',null,h('div',{style:{fontSize:10,color:"#94a3b8",fontWeight:600,marginBottom:2}},"INICIO ORIGINAL"),h('div',{style:{fontWeight:600}},fd(rec.fechaInicioOriginal))),
+                    h('div',null,h('div',{style:{fontSize:10,color:"#94a3b8",fontWeight:600,marginBottom:2}},"CIERRE ORIGINAL"),h('div',{style:{fontWeight:600}},fd(rec.fechaOriginalCierre))))),
+                h('div',{style:{background:"#fffbeb",border:"1.5px solid #fde68a",borderRadius:10,padding:12}},
+                  h('div',{style:{fontSize:12,color:"#92400e",fontWeight:600,marginBottom:8}},"📅 Actualizar fechas (requiere motivo)"),
+                  h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}},
+                    h('div',null,h('label',{style:{display:"block",fontSize:10,fontWeight:600,color:"#374151",marginBottom:4,textTransform:"uppercase"}},"Nueva fecha inicio"),h('input',{type:"date",value:f.fechaInicioActualizada,onChange:e=>set("fechaInicioActualizada",e.target.value),style:aS()})),
+                    h('div',null,h('label',{style:{display:"block",fontSize:10,fontWeight:600,color:"#374151",marginBottom:4,textTransform:"uppercase"}},"Nueva fecha cierre"),h('input',{type:"date",value:f.fechaCierreActualizada,onChange:e=>set("fechaCierreActualizada",e.target.value),style:aS()}))),
+                  (f.fechaInicioActualizada||f.fechaCierreActualizada) && h('div',null,
+                    h('label',{style:{display:"block",fontSize:10,fontWeight:600,color:"#374151",marginBottom:4,textTransform:"uppercase"}},"Motivo del cambio *"),
+                    h('textarea',{value:f.motivoActualizacion,onChange:e=>set("motivoActualizacion",e.target.value),rows:2,placeholder:"Explicá el motivo del cambio de fechas...",style:{...aS(),resize:"vertical"}}))))
+              : h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}},
+                  h('div',null,h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Inicio esperado *"),h('input',{type:"date",value:f.fechaInicioEsperado,onChange:e=>set("fechaInicioEsperado",e.target.value),style:aS()})),
+                  h('div',null,h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Cierre esperado *"),h('input',{type:"date",value:f.fechaCierre,onChange:e=>set("fechaCierre",e.target.value),style:aS()}))),
+          h('div',{style:{marginBottom:14}},h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Presupuesto ($)"),h('input',{value:f.presupuesto,onChange:e=>set("presupuesto",e.target.value),placeholder:"0",type:"number",style:aS()})),
+          h('div',{style:{marginBottom:14}},h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Detalle del presupuesto"),h('textarea',{value:f.presupuestoDetalle,onChange:e=>set("presupuestoDetalle",e.target.value),rows:2,placeholder:"Conceptos...",style:{...aS(),resize:"vertical"}})),
+          h('div',{style:{marginBottom:18}},h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Comentario interno"),h('textarea',{value:f.nuevoComentario,onChange:e=>set("nuevoComentario",e.target.value),rows:3,placeholder:"Novedad, observación o avance...",style:{...aS(),resize:"vertical"}}))),
+
+        // TAB ASIGNACIÓN
+        tab==="asignacion" && h('div',null,
+          rec.ejecutorRechazado && h('div',{style:{background:"#fef2f2",border:"1.5px solid #fecaca",borderRadius:10,padding:12,fontSize:13,color:"#dc2626",fontWeight:600,marginBottom:16}},
+            "❌ Tarea rechazada",h('br'),h('span',{style:{fontWeight:400,fontSize:12}},"Motivo: "+rec.motivoRechazo),h('br'),h('span',{style:{fontWeight:400,fontSize:12}},"Seleccioná un nuevo ejecutor para reasignar.")),
+          h('div',{style:{background:"#eff6ff",border:"1.5px solid #bfdbfe",borderRadius:10,padding:12,marginBottom:16,fontSize:13,color:"#1d4ed8",lineHeight:1.5}},"📧 Al asignar un ejecutor nuevo se enviará email con links de confirmar/rechazar."),
+          h('div',{style:{marginBottom:16}},
+            h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:0.5}},"Seleccionar ejecutor"),
+            h('select',{value:f.ejecutorMail,onChange:e=>selectEj(e.target.value),style:aS()},
+              h('option',{value:""},"— Seleccioná un ejecutor —"),
+              ...ejecutores.map(e=>h('option',{key:e.mail,value:e.mail},e.nombre+" ("+e.mail+")")))),
+          f.ejecutorMail && h('div',{style:{background:"#f8fafc",borderRadius:10,padding:12,fontSize:13,marginBottom:14}},
+            h('div',{style:{fontWeight:600,color:"#1e293b"}},f.ejecutorNombre),
+            h('div',{style:{color:"#64748b"}},f.ejecutorMail)),
+          !rec.ejecutorRechazado && rec.ejecutorConfirmado && h('div',{style:{background:"#f0fdf4",border:"1.5px solid #bbf7d0",borderRadius:10,padding:12,fontSize:13,color:"#15803d",fontWeight:600,marginBottom:12}},"✅ Confirmó el "+fdt(rec.fechaConfirmacion)),
+          // Consolidación
+          h('div',{style:{marginTop:12,background:"#f8fafc",borderRadius:10,padding:12}},
+            h('div',{style:{fontSize:12,fontWeight:700,color:"#374151",marginBottom:8}},"🔗 Consolidar reclamos"),
+            h('div',{style:{fontSize:12,color:"#64748b",marginBottom:8}},"Para consolidar este reclamo con otro, ingresá el número del reclamo padre:"),
+            h('input',{value:f.reclamoPadre||"",onChange:e=>set("reclamoPadre",e.target.value),placeholder:"Ej: R-123456",style:{...aS(),fontSize:13}}))),
+
+        // TAB RESOLUCIÓN
+        tab==="resolucion" && h('div',null,
+          h('div',{style:{marginBottom:14}},h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"¿Qué se hizo?"),h('textarea',{value:f.descripcionResolucion,onChange:e=>set("descripcionResolucion",e.target.value),rows:5,placeholder:"Describí las acciones realizadas...",style:{...aS(),resize:"vertical"}})),
+          h('div',{style:{marginBottom:14}},h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Link de evidencia"),h('input',{value:f.evidenciaUrl,onChange:e=>set("evidenciaUrl",e.target.value),placeholder:"https://...",style:aS()})),
+          f.estadoAvance==="completada" && h('button',{onClick:notifResolucion,disabled:sending,style:{width:"100%",padding:"12px",background:"linear-gradient(135deg,#22c55e,#15803d)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700,marginBottom:12}},sending?"Enviando...":"📧 Notificar resolución a directivos")),
+
+        // TAB HISTORIAL
+        tab==="historial" && h('div',null,
+          (!rec.comentarios||!rec.comentarios.length)
+            ? h('div',{style:{textAlign:"center",padding:"30px 0",color:"#94a3b8",fontSize:14}},"Sin actividad aún")
+            : h('div',{style:{display:"flex",flexDirection:"column",gap:10}},
+                ...[...rec.comentarios].reverse().map((c,i)=>h('div',{key:i,style:{background:"#f8fafc",borderLeft:"3px solid #3b82f6",borderRadius:"0 10px 10px 0",padding:"12px 14px"}},
+                  h('div',{style:{display:"flex",justifyContent:"space-between",marginBottom:4}},
+                    h('span',{style:{fontSize:12,fontWeight:600,color:"#1e293b"}},c.autor),
+                    h('span',{style:{fontSize:11,color:"#94a3b8"}},fdt(c.fecha))),
+                  h('div',{style:{fontSize:13,color:"#475569",lineHeight:1.5}},c.texto))),
+                h('div',{style:{background:"#f8fafc",borderLeft:"3px solid #94a3b8",borderRadius:"0 10px 10px 0",padding:"12px 14px"}},
+                  h('div',{style:{display:"flex",justifyContent:"space-between",marginBottom:4}},
+                    h('span',{style:{fontSize:12,fontWeight:600,color:"#94a3b8"}},"Sistema"),
+                    h('span',{style:{fontSize:11,color:"#94a3b8"}},fdt(rec.createdAt))),
+                  h('div',{style:{fontSize:13,color:"#94a3b8"}},"Reclamo creado por "+(rec.nombre||"anónimo")+" ("+rec.tipo+")")))),
+
+        saveErr && h('div',{style:{background:"#fef2f2",border:"1.5px solid #fecaca",borderRadius:8,padding:"10px 14px",marginBottom:10,fontSize:13,color:"#dc2626"}},saveErr),
+        h('div',{style:{display:"flex",gap:10,marginTop:4}},
+          h('button',{onClick:onClose,style:{flex:1,padding:"12px",background:"#f1f5f9",color:"#64748b",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:600}},"Cancelar"),
+          h('button',{onClick:save,disabled:sending,style:{flex:2,padding:"12px",background:sending?"#94a3b8":"linear-gradient(135deg,#0f172a,#1e3a5f)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700}},sending?"Guardando...":"Guardar ✓")))));
+}
+
+// ── PANEL CONFIG ───────────────────────────────────────────────────────────
+function PanelConfig({onClose, onSaveEjecutores}) {
+  const [ejs,setEjs] = useState([]);
+  const [cfg,setCfg] = useState({scriptUrl:"",mailIntendencia:"",mailAdmin:"",mailDirectivo:""});
+  const [nuevo,setNuevo] = useState({nombre:"",mail:""});
+  const [saved,setSaved] = useState(false);
+
+  useEffect(()=>{
+    setEjs(ls.get("ejecutores")||[{nombre:"Sebastián Falk",mail:"edifalk@gmail.com"}]);
+    setCfg(ls.get("config")||{scriptUrl:"",mailIntendencia:"",mailAdmin:"",mailDirectivo:""});
+  },[]);
+
+  const save = () => {
+    ls.set("ejecutores",ejs); ls.set("config",cfg);
+    if(onSaveEjecutores) onSaveEjecutores(ejs);
+    setSaved(true); setTimeout(()=>{setSaved(false);onClose();},1500);
+  };
+
+  const add = () => { if(!nuevo.nombre.trim()||!nuevo.mail.trim()) return; setEjs(e=>[...e,nuevo]); setNuevo({nombre:"",mail:""}); };
+  const iS = () => ({width:"100%",padding:"10px 14px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:14,outline:"none",boxSizing:"border-box"});
+
+  return h('div',{style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2000,padding:20}},
+    h('div',{style:{background:"white",borderRadius:20,width:"100%",maxWidth:520,maxHeight:"90vh",overflowY:"auto"}},
+      h('div',{style:{background:"#0f172a",padding:"18px 24px",borderRadius:"20px 20px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center"}},
+        h('div',{style:{color:"white",fontSize:18,fontWeight:700,fontFamily:"'Playfair Display',serif"}},"⚙️ Configuración"),
+        h('button',{onClick:onClose,style:{background:"none",border:"none",color:"#94a3b8",fontSize:22,cursor:"pointer"}},"✕")),
+      h('div',{style:{padding:"20px 24px"}},
+        h('div',{style:{marginBottom:24}},
+          h('div',{style:{fontSize:14,fontWeight:700,color:"#0f172a",marginBottom:8}},"📧 Google Apps Script URL"),
+          h('div',{style:{background:"#eff6ff",border:"1.5px solid #bfdbfe",borderRadius:10,padding:12,marginBottom:12,fontSize:12,color:"#1d4ed8",lineHeight:1.6}},
+            h('strong',null,"La URL del script está hardcodeada en la app."),h('br'),"Solo necesitás configurar ejecutores acá."),
+          h('input',{value:cfg.scriptUrl||"",onChange:e=>setCfg(c=>({...c,scriptUrl:e.target.value})),placeholder:"URL alternativa (opcional)",style:iS()})),
+        h('div',{style:{height:1,background:"#f1f5f9",marginBottom:20}}),
+        h('div',{style:{marginBottom:20}},
+          h('div',{style:{fontSize:14,fontWeight:700,color:"#0f172a",marginBottom:12}},"👷 Ejecutores"),
+          ...ejs.map((e,i)=>h('div',{key:i,style:{display:"flex",alignItems:"center",gap:8,marginBottom:8,background:"#f8fafc",borderRadius:8,padding:"10px 12px"}},
+            h('div',{style:{flex:1}},
+              h('div',{style:{fontSize:13,fontWeight:600,color:"#1e293b"}},e.nombre),
+              h('div',{style:{fontSize:12,color:"#64748b"}},e.mail)),
+            h('button',{onClick:()=>setEjs(e=>e.filter((_,idx)=>idx!==i)),style:{background:"none",border:"none",cursor:"pointer",color:"#ef4444",fontSize:16}},"✕"))),
+          h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr auto",gap:8,marginTop:12}},
+            h('input',{value:nuevo.nombre,onChange:e=>setNuevo(n=>({...n,nombre:e.target.value})),placeholder:"Nombre",style:{padding:"9px 12px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:13,outline:"none"}}),
+            h('input',{value:nuevo.mail,onChange:e=>setNuevo(n=>({...n,mail:e.target.value})),placeholder:"Email",type:"email",style:{padding:"9px 12px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:13,outline:"none"}}),
+            h('button',{onClick:add,style:{padding:"9px 14px",background:"#0f172a",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:600}},"+"))),
+        h('button',{onClick:save,style:{width:"100%",padding:"13px",background:saved?"#22c55e":"linear-gradient(135deg,#0f172a,#1e3a5f)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700,transition:"background 0.3s"}},saved?"✅ Guardado":"Guardar configuración"))));
+}
+
+// ── KANBAN ─────────────────────────────────────────────────────────────────
+function Kanban({recs, onEdit}) {
+  return h('div',{style:{display:"flex",gap:14,overflowX:"auto",padding:"0 24px 24px",alignItems:"flex-start"}},
+    ...ESTADOS.map(est=>{
+      const items=recs.filter(r=>r.estadoAvance===est.id);
+      return h('div',{key:est.id,style:{minWidth:250,flex:"0 0 250px"}},
+        h('div',{style:{display:"flex",alignItems:"center",gap:8,marginBottom:12,padding:"8px 12px",background:est.color+"18",borderRadius:10,border:`1.5px solid ${est.color}33`}},
+          h('div',{style:{width:10,height:10,borderRadius:"50%",background:est.color}}),
+          h('span',{style:{fontSize:13,fontWeight:700,color:est.color}},est.label),
+          h('span',{style:{marginLeft:"auto",fontSize:12,fontWeight:700,color:est.color,background:est.color+"22",padding:"2px 8px",borderRadius:10}},items.length)),
+        h('div',{style:{display:"flex",flexDirection:"column",gap:8}},
+          !items.length && h('div',{style:{textAlign:"center",padding:20,color:"#cbd5e1",fontSize:13,background:"#f8fafc",borderRadius:10,border:"1.5px dashed #e2e8f0"}},"Sin reclamos"),
+          ...items.map(r=>{
+            const cat=CATS[r.cat]; const pri=PRIS.find(p=>p.id===(r.criticidad||r.pri)); const t=getTiming(r);
+            return h('div',{key:r.id,onClick:()=>onEdit(r),style:{background:"white",borderRadius:12,padding:12,boxShadow:"0 1px 4px rgba(0,0,0,0.08)",borderLeft:`4px solid ${pri?.color||"#94a3b8"}`,cursor:"pointer"}},
+              h('div',{style:{display:"flex",justifyContent:"space-between",marginBottom:5}},
+                h('span',{style:{fontFamily:"monospace",fontSize:11,fontWeight:700,color:"#3b82f6"}},r.numero),
+                t && h(Badge,{color:t.color,bg:t.bg,label:t.label,sm:true})),
+              h('div',{style:{fontSize:13,fontWeight:600,color:"#1e293b",marginBottom:3}},r.sector),
+              h('div',{style:{fontSize:12,color:"#64748b",marginBottom:5}},cat?.icon+" "+cat?.label),
+              h('div',{style:{fontSize:11,color:"#94a3b8",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},r.desc),
+              r.ejecutorRechazado ? h('div',{style:{marginTop:6,fontSize:11,color:"#dc2626",fontWeight:600}},"❌ Rechazada — acción requerida")
+              : r.ejecutorNombre ? h('div',{style:{marginTop:6,fontSize:11,color:"#64748b"}},"👤 "+r.ejecutorNombre+(r.ejecutorConfirmado?" ✅":r.ejecutorMail?" ⏳":""))
+              : null,
+              h('div',{style:{marginTop:5,fontSize:11,color:"#cbd5e1"}},"Cierre: "+fd(r.fechaCierre)));
+          })));
+    }));
+}
+
+// ── PANEL ADMIN ────────────────────────────────────────────────────────────
+function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores}) {
+  const [filtros,setFiltros] = useState({estado:"",cat:"",sector:"",q:""});
+  const [modal,setModal] = useState(null);
+  const [view,setView] = useState("lista");
+  const [showCfg,setShowCfg] = useState(false);
+  const [checking,setChecking] = useState(false);
+  const sf = (k,v) => setFiltros(f=>({...f,[k]:v}));
+
+  const filtrados = recs.filter(r=>{
+    if(filtros.estado&&r.estadoAvance!==filtros.estado) return false;
+    if(filtros.cat&&r.cat!==filtros.cat) return false;
+    if(filtros.sector&&r.sector!==filtros.sector) return false;
+    if(filtros.q){const q=filtros.q.toLowerCase();if(!r.numero.toLowerCase().includes(q)&&!r.desc?.toLowerCase().includes(q)&&!r.sector.toLowerCase().includes(q))return false;}
+    return true;
+  });
+
+  const stats={
+    total:recs.length,
+    noIniciadas:recs.filter(r=>r.estadoAvance==="no_iniciada").length,
+    enCurso:recs.filter(r=>r.estadoAvance==="iniciada").length,
+    demoradas:recs.filter(r=>r.estadoAvance==="demorada"||(!["completada","consolidada"].includes(r.estadoAvance)&&r.fechaCierre&&new Date(r.fechaCierre)<new Date())).length,
+    completadas:recs.filter(r=>r.estadoAvance==="completada").length,
+  };
+
+  const checkAlerts = async () => {
+    setChecking(true);
+    const ahora=new Date();
+    const por=recs.filter(r=>{
+      if(["completada","consolidada"].includes(r.estadoAvance)) return false;
+      if(!r.fechaCierre) return false;
+      const d=(new Date(r.fechaCierre)-ahora)/86400000;
+      return d>=0&&d<5;
+    });
+    if(por.length){
+      for(const r of por){
+        const d=(new Date(r.fechaCierre)-ahora)/86400000;
+        const dias=d<1?"menos de 1 día":d<2?"1 día":"5 días";
+        const dest=[r.ejecutorMail,r.responsableArea?.mail,NOTIFY_EMAIL].filter(Boolean);
+        if(dest.length) await sendEmail({to:dest,subject:`[Club] ⚠️ Recordatorio — ${r.numero} vence en ${dias}`,body:`Recordatorio: ${r.numero} · ${r.sector}\nVence: ${fd(r.fechaCierre)}\nEjecutor: ${r.ejecutorNombre||"—"}`});
+      }
+      alert("✅ Alertas enviadas para "+por.length+" tarea(s).");
+    } else { alert("✅ No hay tareas próximas a vencer."); }
+    setChecking(false);
+  };
+
+  const aS = () => ({padding:"8px 12px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:13,outline:"none"});
+
+  return h('div',{style:{minHeight:"100vh",background:"#f8fafc"}},
+    // Header
+    h('div',{style:{background:"#0f172a",padding:"14px 24px",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10}},
+      h('div',null,
+        h('div',{style:{fontSize:11,color:"#60a5fa",letterSpacing:2,textTransform:"uppercase"}},"Panel de Gestión"),
+        h('h1',{style:{fontFamily:"'Playfair Display',serif",color:"white",fontSize:22,margin:0}},"Intendencia del Club")),
+      h('div',{style:{display:"flex",gap:8}},
+        h('button',{onClick:()=>setShowCfg(true),style:{padding:"8px 14px",background:"rgba(255,255,255,0.1)",color:"white",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600}},"⚙️ Configuración"),
+        h('button',{onClick:checkAlerts,disabled:checking,style:{padding:"8px 14px",background:checking?"#475569":"#f97316",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600}},checking?"Verificando...":"⚠️ Revisar alertas"))),
+    // Stats
+    h('div',{style:{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:12,padding:"18px 24px 0"}},
+      ...[{l:"Total",v:stats.total,c:"#0f172a"},{l:"No iniciadas",v:stats.noIniciadas,c:"#6b7280"},{l:"En curso",v:stats.enCurso,c:"#3b82f6"},{l:"Demoradas",v:stats.demoradas,c:"#ef4444"},{l:"Completadas",v:stats.completadas,c:"#22c55e"}].map(s=>
+        h('div',{key:s.l,style:{background:"white",borderRadius:12,padding:16,boxShadow:"0 1px 4px rgba(0,0,0,0.08)",borderTop:`3px solid ${s.c}`}},
+          h('div',{style:{fontSize:26,fontWeight:800,color:s.c}},s.v),
+          h('div',{style:{fontSize:12,color:"#64748b",fontWeight:500}},s.l)))),
+    // Filtros
+    h('div',{style:{display:"flex",gap:10,padding:"14px 24px 8px",flexWrap:"wrap",alignItems:"center"}},
+      h('input',{value:filtros.q,onChange:e=>sf("q",e.target.value),placeholder:"🔍 Buscar...",style:{...aS(),minWidth:160}}),
+      h('select',{value:filtros.estado,onChange:e=>sf("estado",e.target.value),style:aS()},
+        h('option',{value:""},"Todos los estados"),
+        ...ESTADOS.map(e=>h('option',{key:e.id,value:e.id},e.label))),
+      h('select',{value:filtros.cat,onChange:e=>sf("cat",e.target.value),style:aS()},
+        h('option',{value:""},"Todas las categorías"),
+        ...Object.values(CATS).map(c=>h('option',{key:c.id,value:c.id},c.label))),
+      h('select',{value:filtros.sector,onChange:e=>sf("sector",e.target.value),style:aS()},
+        h('option',{value:""},"Todos los sectores"),
+        ...SECTORES_TODOS.map(s=>h('option',{key:s,value:s},s))),
+      h('span',{style:{fontSize:13,color:"#94a3b8"}},filtrados.length+" reclamos"),
+      h('div',{style:{marginLeft:"auto",display:"flex",gap:6}},
+        ...[["lista","☰ Lista"],["kanban","⬜ Kanban"]].map(([id,lbl])=>
+          h('button',{key:id,onClick:()=>setView(id),style:{padding:"7px 14px",borderRadius:8,border:"1.5px solid #e2e8f0",background:view===id?"#0f172a":"white",color:view===id?"white":"#64748b",cursor:"pointer",fontSize:12,fontWeight:600}},lbl)))),
+    // Lista
+    view==="lista" && h('div',{style:{padding:"0 24px 24px",overflowX:"auto"}},
+      h('table',{style:{width:"100%",borderCollapse:"separate",borderSpacing:"0 5px"}},
+        h('thead',null,h('tr',null,...["Nº","Fecha","Sector","Tipo","Detalle","Criticidad","Estado","Ejecutor","Status","Cierre","Timing",""].map(hd=>
+          h('th',{key:hd,style:{textAlign:"left",padding:"8px 10px",fontSize:11,color:"#94a3b8",fontWeight:600,letterSpacing:0.5,textTransform:"uppercase"}},hd)))),
+        h('tbody',null,
+          !filtrados.length && h('tr',null,h('td',{colSpan:12,style:{textAlign:"center",padding:40,color:"#94a3b8"}},"No hay reclamos")),
+          ...filtrados.map(r=>{
+            const cat=CATS[r.cat]; const crit=PRIS.find(p=>p.id===(r.criticidad||r.pri));
+            const est=ESTADOS.find(e=>e.id===r.estadoAvance); const t=getTiming(r);
+            return h('tr',{key:r.id,style:{background:"white",boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}},
+              h('td',{style:{padding:"11px 10px",borderRadius:"10px 0 0 10px"}},h('span',{style:{fontFamily:"monospace",fontSize:11,fontWeight:700,color:"#3b82f6"}},r.numero)),
+              h('td',{style:{padding:"11px 10px",fontSize:11,color:"#64748b",whiteSpace:"nowrap"}},fd(r.createdAt)),
+              h('td',{style:{padding:"11px 10px",fontSize:12,fontWeight:500,maxWidth:100}},r.sector),
+              h('td',{style:{padding:"11px 10px",fontSize:13}},cat?.icon),
+              h('td',{style:{padding:"11px 10px",fontSize:11,color:"#64748b",maxWidth:130,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},r.sub),
+              h('td',{style:{padding:"11px 10px"}},h(Badge,{color:crit?.color,label:crit?.label,sm:true})),
+              h('td',{style:{padding:"11px 10px"}},h(Badge,{color:est?.color,label:est?.label,sm:true})),
+              h('td',{style:{padding:"11px 10px",fontSize:11,color:"#64748b"}},r.ejecutorNombre||"—"),
+              h('td',{style:{padding:"11px 10px"}},
+                r.ejecutorRechazado ? h(Badge,{color:"#dc2626",bg:"#fef2f2",label:"❌ Rechazada — acción requerida",sm:true})
+                : r.ejecutorConfirmado ? h(Badge,{color:"#15803d",bg:"#f0fdf4",label:"✅ Confirmada",sm:true})
+                : r.ejecutorMail ? h(Badge,{color:"#1d4ed8",bg:"#eff6ff",label:"⏳ Esp. confirmación",sm:true})
+                : h('span',{style:{color:"#cbd5e1",fontSize:11}},"—")),
+              h('td',{style:{padding:"11px 10px",fontSize:11,color:"#64748b",whiteSpace:"nowrap"}},fd(r.fechaCierre)),
+              h('td',{style:{padding:"11px 10px"}},t?h(Badge,{color:t.color,bg:t.bg,label:t.label,sm:true}):h('span',{style:{color:"#cbd5e1",fontSize:11}},"—")),
+              h('td',{style:{padding:"11px 10px",borderRadius:"0 10px 10px 0"}},
+                h('button',{onClick:()=>setModal(r),style:{padding:"5px 12px",background:"#0f172a",color:"white",border:"none",borderRadius:7,cursor:"pointer",fontSize:12,fontWeight:600}},"Gestionar")));
+          })))),
+    view==="kanban" && h(Kanban,{recs:filtrados,onEdit:setModal}),
+    modal && h(EditModal,{rec:modal,onClose:()=>setModal(null),onSave:async u=>{await onUpdate(u,modal);setModal(null);},ejecutores}),
+    showCfg && h(PanelConfig,{onClose:()=>setShowCfg(false),onSaveEjecutores:ejs=>{setEjecutores(ejs);setShowCfg(false);}}));
+}
+
+// ── LOGIN ──────────────────────────────────────────────────────────────────
+function Login({onLogin, onSeguimiento}) {
+  const [p,setP] = useState(""); const [err,setErr] = useState(false);
+  const [num,setNum] = useState(""); const [errNum,setErrNum] = useState(false);
+  const [tab,setTab] = useState("admin"); // "admin" or "seguimiento"
+  const go = () => { if(p===ADMIN_PASSWORD){onLogin();}else{setErr(true);setTimeout(()=>setErr(false),2000);} };
+  const goSeg = () => { if(num.trim()){onSeguimiento(num.trim().toUpperCase());}else{setErrNum(true);setTimeout(()=>setErrNum(false),2000);} };
+  const tabStyle = (t) => ({padding:"10px 20px",border:"none",background:tab===t?"#0f172a":"transparent",color:tab===t?"white":"#64748b",cursor:"pointer",fontSize:14,fontWeight:tab===t?700:500,borderRadius:8,transition:"all 0.2s"});
+  return h('div',{style:{minHeight:"100vh",background:"#0f172a",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
+    h('div',{style:{background:"white",borderRadius:20,padding:36,maxWidth:400,width:"100%",textAlign:"center"}},
+      h('div',{style:{fontSize:36,marginBottom:12}},"🏛️"),
+      h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:22,margin:"0 0 20px"}},"Club — Reclamos"),
+      // Tabs
+      h('div',{style:{display:"flex",gap:6,background:"#f1f5f9",borderRadius:10,padding:4,marginBottom:24}},
+        h('button',{onClick:()=>setTab("seguimiento"),style:tabStyle("seguimiento")},"🔍 Mi reclamo"),
+        h('button',{onClick:()=>setTab("admin"),style:tabStyle("admin")},"🔒 Intendencia")),
+      // Tab seguimiento
+      tab==="seguimiento" && h('div',null,
+        h('p',{style:{color:"#64748b",fontSize:14,marginBottom:16}},"Ingresá tu número de reclamo para ver el estado"),
+        h('input',{value:num,onChange:e=>setNum(e.target.value),onKeyDown:e=>e.key==="Enter"&&goSeg(),placeholder:"Ej: R-123456",
+          style:{width:"100%",padding:"12px 14px",borderRadius:10,border:errNum?"2px solid #ef4444":"2px solid #e2e8f0",fontSize:16,outline:"none",marginBottom:12,boxSizing:"border-box",textAlign:"center",letterSpacing:2,fontWeight:700}}),
+        errNum && h('div',{style:{color:"#ef4444",fontSize:13,marginBottom:8}},"Ingresá un número de reclamo"),
+        h('button',{onClick:goSeg,style:{width:"100%",padding:"13px",background:"linear-gradient(135deg,#3b82f6,#1d4ed8)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:15,fontWeight:700}},"Ver mi reclamo →")),
+      // Tab admin
+      tab==="admin" && h('div',null,
+        h('p',{style:{color:"#64748b",fontSize:14,marginBottom:16}},"Ingresá la contraseña de intendencia"),
+        h('input',{type:"password",value:p,onChange:e=>setP(e.target.value),onKeyDown:e=>e.key==="Enter"&&go(),placeholder:"Contraseña",
+          style:{width:"100%",padding:"12px 14px",borderRadius:10,border:err?"2px solid #ef4444":"2px solid #e2e8f0",fontSize:15,outline:"none",marginBottom:12,boxSizing:"border-box"}}),
+        err && h('div',{style:{color:"#ef4444",fontSize:13,marginBottom:8}},"Contraseña incorrecta"),
+        h('button',{onClick:go,style:{width:"100%",padding:"13px",background:"#0f172a",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:15,fontWeight:700}},"Ingresar →"))));
+}
+
+// ── APP ROOT ───────────────────────────────────────────────────────────────
+function App() {
+  // Detect URL params immediately so seguimiento works without login
+  const _params = new URLSearchParams(window.location.search);
+  const _segParam = _params.get("seguimiento");
+  const _initView = _segParam ? "seguimiento_"+_segParam
+    : _params.get("confirmar") ? "loading"
+    : _params.get("rechazar")  ? "loading"
+    : _params.get("reabrir")   ? "loading"
+    : "socio";
+
+  const [view,setView]           = useState(_initView);
+  const [auth,setAuth]           = useState(false);
+  const [recs,setRecs]           = useState([]);
+  const [ejecutores,setEjecutores] = useState([{nombre:"Sebastián Falk",mail:"edifalk@gmail.com"}]);
+  const [loaded,setLoaded]       = useState(false);
+
+  useEffect(()=>{
+    (async()=>{
+      const params = new URLSearchParams(window.location.search);
+      const confirmarId  = params.get("confirmar");
+      const rechazarId   = params.get("rechazar");
+      const reabrirId    = params.get("reabrir");
+      const seguimientoN = params.get("seguimiento");
+      const calificarId  = params.get("calificar");
+
+      const lista = await sbGetAll();
+
+      if(confirmarId){
+        const r=lista.find(r=>String(r.id)===confirmarId);
+        if(r){
+          const updated={...r,ejecutorConfirmado:true,ejecutorRechazado:false,
+            fechaConfirmacion:new Date().toISOString(),
+            comentarios:[...(r.comentarios||[]),{texto:"Ejecutor confirmó responsabilidad.",fecha:new Date().toISOString(),autor:"Sistema"}]};
+          await sbUpsert(updated);
+          await sendEmail({to:[r.responsableArea?.mail,NOTIFY_EMAIL].filter(Boolean),
+            subject:`[Club] ✅ Ejecutor confirmó — ${r.numero}: ${r.sector}`,
+            body:`${r.ejecutorNombre} confirmó que asume la tarea ${r.numero} (${r.sector}).`});
+        }
+        setView("confirm_ok");
+      } else if(rechazarId){
+        const r=lista.find(r=>String(r.id)===rechazarId);
+        ls.set("pendingRechazar",{id:rechazarId,rec:r});
+        setView("rechazar");
+      } else if(calificarId){
+        setView("calificar_"+calificarId);
+      } else if(seguimientoN){
+        setView("seguimiento_"+seguimientoN);
+      } else if(reabrirId){
+        const r=lista.find(r=>String(r.id)===reabrirId);
+        if(r){
+          const updated={...r,estadoAvance:"no_iniciada",
+            comentarios:[...(r.comentarios||[]),{texto:"Tarea reabierta.",fecha:new Date().toISOString(),autor:"Sistema"}]};
+          await sbUpsert(updated);
+          alert("🔄 Tarea reabierta.");
+        }
+      }
+
+      setRecs(lista);
+      const ej=ls.get("ejecutores"); if(ej) setEjecutores(ej);
+      setLoaded(true);
+    })();
+  },[]);
+
+  // Refresh data periodically when in seguimiento view
+  useEffect(()=>{
+    if(!view || !view.startsWith("seguimiento_")) return;
+    const interval = setInterval(async()=>{
+      const lista = await sbGetAll();
+      setRecs(lista);
+    }, 10000); // refresh every 10 seconds
+    return ()=>clearInterval(interval);
+  },[view]);
+
+  // Also refresh immediately when seguimiento view loads
+  useEffect(()=>{
+    if(!view || !view.startsWith("seguimiento_") || !loaded) return;
+    sbGetAll().then(lista=>setRecs(lista));
+  },[view, loaded]);
+
+  const add = async rec => { setRecs(prev=>[rec,...prev]); await sbUpsert(rec); };
+  const upd = async (rec, prevRec) => {
+    setRecs(prev=>prev.map(r=>r.id===rec.id?rec:r));
+    await sbUpsert(rec);
+    const appUrl = window.location.href.split("?")[0];
+    const seguimientoUrl = appUrl+"?seguimiento="+rec.numero;
+    // Notificar al usuario cuando intendencia confirma fecha de resolución por primera vez
+    if(rec.email && rec.fechaCierreConfirmada && prevRec && !prevRec.fechaCierreConfirmada){
+      await sendEmail({to:rec.email,
+        subject:`[Club] Tu reclamo está siendo atendido — ${rec.numero}`,
+        body:`Hola ${rec.nombre},
+
+Tu reclamo fue asignado y está siendo atendido por nuestro equipo.
+
+Número: ${rec.numero}
+Sector: ${rec.sector}
+Fecha tentativa de resolución: ${fd(rec.fechaCierreConfirmada)}
+
+Seguí el estado en tiempo real:
+${seguimientoUrl}
+
+Te avisaremos cuando esté resuelto.
+
+— Equipo de Intendencia`});
+    }
+    // Notificar al usuario cuando se completa
+    if(rec.email && rec.estadoAvance==="completada" && prevRec && prevRec.estadoAvance!=="completada"){
+      await sendEmail({to:rec.email,
+        subject:`[Club] ✅ Tu reclamo fue resuelto — ${rec.numero}`,
+        body:`Hola ${rec.nombre},\n\nTu reclamo fue resuelto.\n\nNúmero: ${rec.numero}\nSector: ${rec.sector}\n${rec.descripcionResolucion?"Resolución: "+rec.descripcionResolucion+"\n":""}${rec.evidenciaUrl?"Evidencia: "+rec.evidenciaUrl+"\n":""}\nPor favor calificá la resolución (1-5 estrellas) haciendo clic acá:\n${appUrl}?calificar=${rec.id}\n\nSi no quedás conforme podés solicitar la reapertura desde ese link.\n\n— Equipo de Intendencia`});
+
+    }
+  };
+
+  const handleRechazar = async motivo => {
+    const pending=ls.get("pendingRechazar");
+    if(!pending) return;
+    const {id,rec}=pending;
+    if(!rec) return;
+    const updated={...rec,ejecutorRechazado:true,ejecutorConfirmado:false,
+      motivoRechazo:motivo,ejecutorMail:"",ejecutorNombre:"",estadoAvance:"no_iniciada",
+      comentarios:[...(rec.comentarios||[]),{texto:`Ejecutor rechazó. Motivo: ${motivo}`,fecha:new Date().toISOString(),autor:"Sistema"}]};
+    await sbUpsert(updated);
+    ls.set("pendingRechazar",null);
+    setRecs(prev=>prev.map(r=>String(r.id)===String(id)?updated:r));
+    await sendEmail({to:[rec.responsableArea?.mail,NOTIFY_EMAIL].filter(Boolean),
+      subject:`[Club] ❌ Ejecutor rechazó — ${rec.numero}: ${rec.sector}`,
+      body:`${rec.ejecutorNombre} rechazó la tarea ${rec.numero} (${rec.sector}).\n\nMotivo: ${motivo}\n\nDebés reasignar esta tarea.`});
+    setView("rechazar_ok");
+  };
+
+  if(!loaded) return h('div',{style:{minHeight:"100vh",background:"#0f172a",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:18}},"Cargando...");
+
+  if(view==="confirm_ok") return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
+    h('div',{style:{background:"white",borderRadius:20,padding:40,maxWidth:420,width:"100%",textAlign:"center",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}},
+      h('div',{style:{fontSize:64,marginBottom:16}},"✅"),
+      h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:26,color:"#0f172a",margin:"0 0 12px"}},"¡Tarea confirmada!"),
+      h('p',{style:{color:"#64748b",fontSize:15,lineHeight:1.6}},"Confirmaste que asumís la responsabilidad. El responsable del área fue notificado."),
+      h('p',{style:{color:"#94a3b8",fontSize:13,marginTop:16}},"Podés cerrar esta ventana.")));
+
+  if(view==="rechazar_ok") return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
+    h('div',{style:{background:"white",borderRadius:20,padding:40,maxWidth:420,width:"100%",textAlign:"center",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}},
+      h('div',{style:{fontSize:64,marginBottom:16}},"📨"),
+      h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:26,color:"#0f172a",margin:"0 0 12px"}},"Rechazo registrado"),
+      h('p',{style:{color:"#64748b",fontSize:15,lineHeight:1.6}},"Tu respuesta fue registrada. El responsable fue notificado y reasignará la tarea."),
+      h('p',{style:{color:"#94a3b8",fontSize:13,marginTop:16}},"Podés cerrar esta ventana.")));
+
+  // Vista calificación
+  if(view && view.startsWith("calificar_")) {
+    const recId = Number(view.replace("calificar_",""));
+    const rec = recs.find(r=>r.id===recId);
+    const [stars,setStars] = useState(0);
+    const [motivo,setMotivo] = useState("");
+    const [done,setDone] = useState(false);
+    const [sending,setSending] = useState(false);
+
+    const submitCalif = async () => {
+      if(!stars) return;
+      if(stars <= 3 && !motivo.trim()) return;
+      setSending(true);
+      const mailCfg = getMailConfig();
+      const updated = {...rec, calificacion:stars, motivoCalificacion:motivo,
+        estadoAvance: stars >= 4 ? "completada" : rec.estadoAvance,
+        comentarios:[...(rec.comentarios||[]),{texto:`Usuario calificó con ${stars}⭐${motivo?". Motivo: "+motivo:""}`,fecha:new Date().toISOString(),autor:"Sistema"}]};
+      await sbUpsert(updated);
+      setRecs(prev=>prev.map(r=>r.id===recId?updated:r));
+      const respMail = getResponsableMail(rec.cat) || NOTIFY_EMAIL;
+      await sendEmail({to:[respMail, mailCfg.directivo].filter(Boolean),
+        subject:`[Club] ⭐ Calificación ${stars}/5 — ${rec.numero}`,
+        body:`El solicitante calificó con ${stars}⭐. Sector: ${rec.sector}. ${motivo?"Comentario: "+motivo+"\n":""}Solicitante: ${rec.nombre}`});
+      setSending(false);
+      setDone(true);
+    };
+
+    if(!rec && loaded) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
+      h('div',{style:{background:"white",borderRadius:20,padding:40,maxWidth:420,width:"100%",textAlign:"center"}},
+        h('div',{style:{fontSize:48,marginBottom:16}},"🔍"),
+        h('p',{style:{color:"#64748b"}},"Reclamo no encontrado.")));
+
+    if(done) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
+      h('div',{style:{background:"white",borderRadius:20,padding:40,maxWidth:420,width:"100%",textAlign:"center",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}},
+        h('div',{style:{fontSize:64,marginBottom:16}},stars>=4?"🎉":"📨"),
+        h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:24,color:"#0f172a",margin:"0 0 12px"}},stars>=4?"¡Gracias por tu calificación!":"Solicitud de reapertura enviada"),
+        h('p',{style:{color:"#64748b",fontSize:15,lineHeight:1.6}},stars>=4?"Tu feedback fue registrado. ¡Nos alegra que el problema haya quedado resuelto!":"El equipo revisará tu solicitud y reabrirá el reclamo si corresponde."),
+        h('p',{style:{color:"#94a3b8",fontSize:13,marginTop:16}},"Podés cerrar esta ventana.")));
+
+    return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",padding:"20px 16px 40px"}},
+      h('div',{style:{textAlign:"center",marginBottom:24,paddingTop:20}},
+        h('div',{style:{fontSize:11,letterSpacing:3,color:"#93c5fd",textTransform:"uppercase",marginBottom:8}},"Calificación de Resolución"),
+        h('h1',{style:{fontFamily:"'Playfair Display',serif",fontSize:26,color:"white",fontWeight:900}},rec?.numero||""),
+        h('div',{style:{width:40,height:3,background:"#3b82f6",margin:"10px auto 0",borderRadius:2}})),
+      h('div',{style:{maxWidth:480,margin:"0 auto"}},
+        h('div',{style:{background:"white",borderRadius:16,padding:"24px 20px"}},
+          // Resumen resolución
+          rec && h('div',{style:{background:"#f0fdf4",border:"1.5px solid #bbf7d0",borderRadius:12,padding:"14px 16px",marginBottom:20}},
+            h('div',{style:{fontSize:11,color:"#15803d",fontWeight:700,marginBottom:6,textTransform:"uppercase"}},"✅ Resolución"),
+            h('div',{style:{fontSize:13,color:"#166534",lineHeight:1.6}},rec.descripcionResolucion||"Tarea completada."),
+            rec.adjuntosResolucion?.filter(a=>a.url).length > 0 && h('div',{style:{marginTop:10,display:"flex",gap:8,flexWrap:"wrap"}},
+              ...rec.adjuntosResolucion.filter(a=>a.url).map((a,i)=>
+                h('a',{key:i,href:a.url,target:"_blank",style:{display:"inline-flex",alignItems:"center",gap:4,padding:"5px 10px",background:"#dcfce7",borderRadius:8,fontSize:12,color:"#15803d",fontWeight:600,textDecoration:"none"}},
+                  a.tipo?.startsWith("video")?"🎥":"📷"," Ver")))),
+          // Stars
+          h('div',{style:{textAlign:"center",marginBottom:20}},
+            h('div',{style:{fontSize:14,fontWeight:600,color:"#374151",marginBottom:12}},"¿Cómo calificás la resolución?"),
+            h('div',{style:{display:"flex",justifyContent:"center",gap:8}},
+              ...[1,2,3,4,5].map(s=>h('button',{key:s,onClick:()=>setStars(s),
+                style:{fontSize:36,background:"none",border:"none",cursor:"pointer",opacity:s<=stars?1:0.3,transform:s<=stars?"scale(1.1)":"scale(1)",transition:"all 0.15s"}},
+                "⭐")))),
+          // Motivo si baja calificación
+          stars > 0 && stars <= 3 && h('div',{style:{marginBottom:16}},
+            h('label',{style:{display:"block",fontSize:12,fontWeight:600,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:0.5}},"Contanos qué salió mal *"),
+            h('textarea',{value:motivo,onChange:e=>setMotivo(e.target.value),rows:4,placeholder:"Describí por qué no quedaste conforme...",style:{width:"100%",padding:"10px 14px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:14,resize:"vertical",outline:"none",boxSizing:"border-box"}})),
+          // Botón
+          stars > 0 && h('button',{onClick:submitCalif,disabled:sending||(stars<=3&&!motivo.trim()),
+            style:{width:"100%",padding:"14px",background:(sending||(stars<=3&&!motivo.trim()))?"#94a3b8":stars>=4?"linear-gradient(135deg,#22c55e,#15803d)":"linear-gradient(135deg,#ef4444,#dc2626)",color:"white",border:"none",borderRadius:12,fontSize:15,fontWeight:700,cursor:"pointer"}},
+            sending?"Enviando...":stars>=4?"✅ Confirmar resolución":"📨 Solicitar reapertura"))));
+  }
+
+  if(view==="rechazar") return h(PantallaRechazo,{onConfirm:handleRechazar});
+
+  // Seguimiento view — recarga datos frescos desde Supabase
+  if(view && view.startsWith("seguimiento_")) {
+    const numSeg = view.replace("seguimiento_","");
+    // Still loading from Supabase
+    if(!loaded) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center"}},
+      h('div',{style:{textAlign:"center",color:"white"}},
+        h('div',{style:{fontSize:40,marginBottom:16}},"🔍"),
+        h('div',{style:{fontSize:18}},"Buscando tu reclamo...")));
+    // Always get fresh data from Supabase for this specific reclamo
+    const rec = recs.find(r=>r.numero===numSeg);
+    if(!rec) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
+      h('div',{style:{background:"white",borderRadius:20,padding:40,maxWidth:420,width:"100%",textAlign:"center"}},
+        h('div',{style:{fontSize:48,marginBottom:16}},"🔍"),
+        h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:22,margin:"0 0 12px"}},"Reclamo no encontrado"),
+        h('p',{style:{color:"#64748b",fontSize:14}},"No encontramos el reclamo "+numSeg+". Verificá el número e intentá de nuevo."),
+        h('button',{onClick:()=>setView("admin"),style:{marginTop:20,padding:"10px 24px",background:"#0f172a",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:600}},"Consultar otro reclamo")));
+    const cat=CATS[rec.cat]; const pri=PRIS.find(p=>p.id===rec.pri);
+    const est=ESTADOS.find(e=>e.id===rec.estadoAvance); const t=getTiming(rec);
+    const appUrl=window.location.href.split("?")[0];
+    return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",padding:"20px 16px 40px"}},
+      h('div',{style:{textAlign:"center",marginBottom:24,paddingTop:20}},
+        h('div',{style:{fontSize:11,letterSpacing:3,color:"#93c5fd",textTransform:"uppercase",marginBottom:8}},"Seguimiento de Reclamo"),
+        h('h1',{style:{fontFamily:"'Playfair Display',serif",fontSize:26,color:"white",fontWeight:900}},rec.numero),
+        h('div',{style:{width:40,height:3,background:"#3b82f6",margin:"10px auto 0",borderRadius:2}})),
+      h('div',{style:{maxWidth:500,margin:"0 auto"}},
+        h('div',{style:{background:"white",borderRadius:16,padding:"22px 20px"}},
+          // Estado actual
+          h('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,paddingBottom:16,borderBottom:"1.5px solid #f1f5f9"}},
+            h('div',null,
+              h('div',{style:{fontSize:11,color:"#94a3b8",fontWeight:600,marginBottom:4,textTransform:"uppercase",letterSpacing:0.5}},"Estado actual"),
+              h(Badge,{color:est?.color,label:est?.label,sm:false})),
+            t && h(Badge,{color:t.color,bg:t.bg,label:t.label,sm:false})),
+          // Info
+          h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:16}},
+            h('div',null,h('div',{style:{fontSize:11,color:"#94a3b8",fontWeight:600,marginBottom:3,textTransform:"uppercase"}},"Sector"),h('div',{style:{fontSize:14,fontWeight:600,color:"#1e293b"}},rec.sector)),
+            h('div',null,h('div',{style:{fontSize:11,color:"#94a3b8",fontWeight:600,marginBottom:3,textTransform:"uppercase"}},"Tipo"),h('div',{style:{fontSize:14}},cat?.icon+" "+cat?.label)),
+            h('div',null,h('div',{style:{fontSize:11,color:"#94a3b8",fontWeight:600,marginBottom:3,textTransform:"uppercase"}},"Ingresado"),h('div',{style:{fontSize:14}},fd(rec.createdAt))),
+            h('div',null,
+              h('div',{style:{fontSize:11,color:"#94a3b8",fontWeight:600,marginBottom:3,textTransform:"uppercase"}},"Fecha tentativa de resolución"),
+              rec.fechaCierreConfirmada
+                ? h('div',{style:{fontSize:14,fontWeight:600,color:"#0f172a"}},fd(rec.fechaCierreConfirmada))
+                : h('div',{style:{fontSize:13,color:"#94a3b8",fontStyle:"italic"}},"A definir por intendencia"))),
+          h('div',{style:{marginBottom:16}},
+            h('div',{style:{fontSize:11,color:"#94a3b8",fontWeight:600,marginBottom:4,textTransform:"uppercase"}},"Descripción"),
+            h('div',{style:{fontSize:14,color:"#475569",lineHeight:1.6}},rec.desc)),
+          rec.adjuntos && rec.adjuntos.filter(a=>a.url).length>0 && h('div',{style:{marginBottom:16}},
+            h('div',{style:{fontSize:11,color:"#94a3b8",fontWeight:600,marginBottom:8,textTransform:"uppercase"}},"Fotos adjuntas"),
+            h('div',{style:{display:"flex",gap:8,flexWrap:"wrap"}},
+              ...rec.adjuntos.filter(a=>a.url).map((a,i)=>
+                a.tipo?.startsWith("video")
+                  ? h('a',{key:i,href:a.url,target:"_blank",style:{display:"inline-flex",alignItems:"center",gap:4,padding:"6px 12px",background:"#f1f5f9",borderRadius:8,fontSize:12,color:"#475569",fontWeight:600,textDecoration:"none"}},"🎥 Ver video")
+                  : h('a',{key:i,href:a.url,target:"_blank"},
+                      h('img',{src:a.url,alt:a.nombre,style:{width:80,height:80,objectFit:"cover",borderRadius:8,border:"1.5px solid #e2e8f0"}}))))),
+          // Resolución si está completada
+          rec.estadoAvance==="completada" && rec.descripcionResolucion && h('div',{style:{background:"#f0fdf4",border:"1.5px solid #bbf7d0",borderRadius:12,padding:"14px 16px",marginBottom:16}},
+            h('div',{style:{fontSize:11,color:"#15803d",fontWeight:700,marginBottom:6,textTransform:"uppercase"}},"✅ Resolución"),
+            h('div',{style:{fontSize:14,color:"#166534",lineHeight:1.6}},rec.descripcionResolucion),
+            rec.evidenciaUrl && h('a',{href:rec.evidenciaUrl,target:"_blank",style:{display:"inline-block",marginTop:8,fontSize:13,color:"#15803d",fontWeight:600}},"📎 Ver evidencia →"),
+            rec.adjuntosResolucion && rec.adjuntosResolucion.length>0 && h('div',{style:{marginTop:12,display:"flex",gap:8,flexWrap:"wrap"}},
+              ...rec.adjuntosResolucion.filter(a=>a.url).map((a,i)=>
+                h('a',{key:i,href:a.url,target:"_blank",style:{display:"inline-flex",alignItems:"center",gap:4,padding:"6px 12px",background:"#dcfce7",borderRadius:8,fontSize:12,color:"#15803d",fontWeight:600,textDecoration:"none"}},
+                  a.tipo?.startsWith("video")?"🎥":"📷", a.nombre)))),
+          // Reabrir si completada
+          rec.estadoAvance==="completada" && h('div',{style:{background:"#fff7ed",border:"1.5px solid #fed7aa",borderRadius:10,padding:"12px 16px"}},
+            h('div',{style:{fontSize:13,color:"#92400e",marginBottom:8}},"¿Querés calificar la resolución o solicitar reapertura?"),
+            h('a',{href:appUrl+"?calificar="+rec.id,style:{display:"inline-block",padding:"8px 20px",background:"#f97316",color:"white",borderRadius:8,fontSize:13,fontWeight:600,textDecoration:"none"}},"⭐ Calificar resolución")))));
+  }
+
+  return h('div',null,
+    h('div',{style:{position:"fixed",bottom:20,right:20,zIndex:999,display:"flex",gap:8}},
+      h('button',{onClick:()=>setView("socio"),style:{padding:"8px 16px",borderRadius:20,border:"none",background:view==="socio"?"#3b82f6":"rgba(255,255,255,0.9)",color:view==="socio"?"white":"#374151",cursor:"pointer",fontSize:13,fontWeight:600,boxShadow:"0 2px 12px rgba(0,0,0,0.2)"}},"📋 Formulario"),
+      h('button',{onClick:()=>setView("admin"),style:{padding:"8px 16px",borderRadius:20,border:"none",background:view==="admin"?"#0f172a":"rgba(255,255,255,0.9)",color:view==="admin"?"white":"#374151",cursor:"pointer",fontSize:13,fontWeight:600,boxShadow:"0 2px 12px rgba(0,0,0,0.2)"}},"⚙️ Panel")),
+    view==="socio" && h(FormularioSocio,{onSubmit:add,reclamos:recs}),
+    view==="admin" && !auth && h(Login,{onLogin:()=>setAuth(true),onSeguimiento:num=>setView("seguimiento_"+num)}),
+    view==="admin" && auth && h(PanelAdmin,{recs,onUpdate:upd,ejecutores,setEjecutores}));
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
+</script>
+</body>
+</html>
