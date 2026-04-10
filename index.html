@@ -30,11 +30,16 @@ const ESCALADO = {
 function getMailConfig() {
   const cfg = ls.get("config") || {};
   return {
-    intendencia: cfg.mailIntendencia || "",
-    admin:       cfg.mailAdmin       || "",
-    directivo:   cfg.mailDirectivo   || "",
-    scriptUrl:   cfg.scriptUrl       || SCRIPT_URL,
+    intendencia:          cfg.mailIntendencia || "",
+    admin:                cfg.mailAdmin || "",
+    directivosIntendencia: cfg.directivosIntendencia || [],
+    directivosAdmin:       cfg.directivosAdmin || [],
+    scriptUrl:            cfg.scriptUrl || SCRIPT_URL,
   };
+}
+function getDirectivos(cat) {
+  const cfg = getMailConfig();
+  return isAdminCat(cat) ? cfg.directivosAdmin : cfg.directivosIntendencia;
 }
 
 function isAdminCat(cat) {
@@ -47,6 +52,7 @@ function getResponsableMail(cat) {
 }
 
 function diasDesde(isoDate) {
+  if (window._diasDesdeOverride) return window._diasDesdeOverride;
   return (new Date() - new Date(isoDate)) / 86400000;
 }
 const ADMIN_PASSWORD = "intendencia2024";
@@ -135,7 +141,7 @@ function getSubcategorias(cat, sector) {
 }
 
 const CATS = {
-  infraestructura:{id:"infraestructura",label:"Infraestructura",icon:"🏗️",resp:{nombre:"Gustavo García",mail:"gustavo.garcia@club.com.ar"}},
+  infraestructura:{id:"infraestructura",label:"Infraestructura",icon:"🏗️",resp:{nombre:"— Por configurar —",mail:""}},
   limpieza:{id:"limpieza",label:"Limpieza",icon:"🧹",resp:{nombre:"— Por configurar —",mail:""}},
   mantenimiento:{id:"mantenimiento",label:"Mantenimiento",icon:"🔧",resp:{nombre:"— Por configurar —",mail:""}},
   equipamiento:{id:"equipamiento",label:"Equipamiento",icon:"⚙️",resp:{nombre:"— Por configurar —",mail:""}},
@@ -629,14 +635,16 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
 
 // ── PANEL CONFIG ───────────────────────────────────────────────────────────
 function PanelConfig({onClose, onSaveEjecutores}) {
+  const defaultCfg = {scriptUrl:"",mailIntendencia:"",mailAdmin:"",directivosIntendencia:[],directivosAdmin:[]};
   const [ejs,setEjs] = useState([]);
-  const [cfg,setCfg] = useState({scriptUrl:"",mailIntendencia:"",mailAdmin:"",mailDirectivo:""});
-  const [nuevo,setNuevo] = useState({nombre:"",mail:""});
+  const [cfg,setCfg] = useState(defaultCfg);
+  const [nuevos,setNuevos] = useState({ej:{nombre:"",mail:""},di:{nombre:"",mail:""},da:{nombre:"",mail:""}});
   const [saved,setSaved] = useState(false);
+  const [tab,setTab] = useState("roles");
 
   useEffect(()=>{
-    setEjs(ls.get("ejecutores")||[{nombre:"Sebastián Falk",mail:"edifalk@gmail.com"}]);
-    setCfg(ls.get("config")||{scriptUrl:"",mailIntendencia:"",mailAdmin:"",mailDirectivo:""});
+    setEjs(ls.get("ejecutores")||[]);
+    setCfg(ls.get("config")||defaultCfg);
   },[]);
 
   const save = () => {
@@ -645,33 +653,91 @@ function PanelConfig({onClose, onSaveEjecutores}) {
     setSaved(true); setTimeout(()=>{setSaved(false);onClose();},1500);
   };
 
-  const add = () => { if(!nuevo.nombre.trim()||!nuevo.mail.trim()) return; setEjs(e=>[...e,nuevo]); setNuevo({nombre:"",mail:""}); };
-  const iS = () => ({width:"100%",padding:"10px 14px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:14,outline:"none",boxSizing:"border-box"});
+  const iS = () => ({width:"100%",padding:"9px 12px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:13,outline:"none",boxSizing:"border-box"});
+
+  const PersonList = ({list, onRemove, onAdd, nuevoKey, placeholder}) => {
+    const n = nuevos[nuevoKey];
+    const addItem = () => { if(!n.nombre.trim()||!n.mail.trim()) return; onAdd(n); setNuevos(p=>({...p,[nuevoKey]:{nombre:"",mail:""}})); };
+    return h('div',null,
+      ...list.map((e,i)=>h('div',{key:i,style:{display:"flex",alignItems:"center",gap:8,marginBottom:6,background:"#f8fafc",borderRadius:8,padding:"8px 12px"}},
+        h('div',{style:{flex:1}},
+          h('div',{style:{fontSize:13,fontWeight:600,color:"#1e293b"}},e.nombre),
+          h('div',{style:{fontSize:12,color:"#64748b"}},e.mail)),
+        h('button',{onClick:()=>onRemove(i),style:{background:"none",border:"none",cursor:"pointer",color:"#ef4444",fontSize:16}},"✕"))),
+      h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr auto",gap:6,marginTop:8}},
+        h('input',{value:n.nombre,onChange:e=>setNuevos(p=>({...p,[nuevoKey]:{...p[nuevoKey],nombre:e.target.value}})),placeholder:"Nombre",style:{...iS(),fontSize:12}}),
+        h('input',{value:n.mail,onChange:e=>setNuevos(p=>({...p,[nuevoKey]:{...p[nuevoKey],mail:e.target.value}})),placeholder:"Email",type:"email",style:{...iS(),fontSize:12}}),
+        h('button',{onClick:addItem,style:{padding:"8px 12px",background:"#0f172a",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:600}},"+"))
+    );
+  };
+
+  const tabStyle = t => ({padding:"8px 14px",border:"none",background:tab===t?"#0f172a":"transparent",color:tab===t?"white":"#64748b",cursor:"pointer",fontSize:13,fontWeight:tab===t?700:500,borderRadius:8});
 
   return h('div',{style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2000,padding:20}},
-    h('div',{style:{background:"white",borderRadius:20,width:"100%",maxWidth:520,maxHeight:"90vh",overflowY:"auto"}},
+    h('div',{style:{background:"white",borderRadius:20,width:"100%",maxWidth:560,maxHeight:"93vh",overflowY:"auto"}},
       h('div',{style:{background:"#0f172a",padding:"18px 24px",borderRadius:"20px 20px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center"}},
         h('div',{style:{color:"white",fontSize:18,fontWeight:700,fontFamily:"'Playfair Display',serif"}},"⚙️ Configuración"),
         h('button',{onClick:onClose,style:{background:"none",border:"none",color:"#94a3b8",fontSize:22,cursor:"pointer"}},"✕")),
+      h('div',{style:{display:"flex",gap:4,padding:"12px 20px 0",background:"#f8fafc",borderBottom:"1px solid #e2e8f0"}},
+        ...[["roles","👥 Roles"],["escalado","⏱️ Escalado"],["sistema","🔗 Sistema"]].map(([id,lbl])=>
+          h('button',{key:id,onClick:()=>setTab(id),style:tabStyle(id)},lbl))),
       h('div',{style:{padding:"20px 24px"}},
-        h('div',{style:{marginBottom:24}},
-          h('div',{style:{fontSize:14,fontWeight:700,color:"#0f172a",marginBottom:8}},"📧 Google Apps Script URL"),
-          h('div',{style:{background:"#eff6ff",border:"1.5px solid #bfdbfe",borderRadius:10,padding:12,marginBottom:12,fontSize:12,color:"#1d4ed8",lineHeight:1.6}},
-            h('strong',null,"La URL del script está hardcodeada en la app."),h('br'),"Solo necesitás configurar ejecutores acá."),
-          h('input',{value:cfg.scriptUrl||"",onChange:e=>setCfg(c=>({...c,scriptUrl:e.target.value})),placeholder:"URL alternativa (opcional)",style:iS()})),
-        h('div',{style:{height:1,background:"#f1f5f9",marginBottom:20}}),
-        h('div',{style:{marginBottom:20}},
-          h('div',{style:{fontSize:14,fontWeight:700,color:"#0f172a",marginBottom:12}},"👷 Ejecutores"),
-          ...ejs.map((e,i)=>h('div',{key:i,style:{display:"flex",alignItems:"center",gap:8,marginBottom:8,background:"#f8fafc",borderRadius:8,padding:"10px 12px"}},
-            h('div',{style:{flex:1}},
-              h('div',{style:{fontSize:13,fontWeight:600,color:"#1e293b"}},e.nombre),
-              h('div',{style:{fontSize:12,color:"#64748b"}},e.mail)),
-            h('button',{onClick:()=>setEjs(e=>e.filter((_,idx)=>idx!==i)),style:{background:"none",border:"none",cursor:"pointer",color:"#ef4444",fontSize:16}},"✕"))),
-          h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr auto",gap:8,marginTop:12}},
-            h('input',{value:nuevo.nombre,onChange:e=>setNuevo(n=>({...n,nombre:e.target.value})),placeholder:"Nombre",style:{padding:"9px 12px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:13,outline:"none"}}),
-            h('input',{value:nuevo.mail,onChange:e=>setNuevo(n=>({...n,mail:e.target.value})),placeholder:"Email",type:"email",style:{padding:"9px 12px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:13,outline:"none"}}),
-            h('button',{onClick:add,style:{padding:"9px 14px",background:"#0f172a",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:600}},"+"))),
-        h('button',{onClick:save,style:{width:"100%",padding:"13px",background:saved?"#22c55e":"linear-gradient(135deg,#0f172a,#1e3a5f)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700,transition:"background 0.3s"}},saved?"✅ Guardado":"Guardar configuración"))));
+
+        // TAB ROLES
+        tab==="roles" && h('div',null,
+          // Ejecutores / Empleados
+          h('div',{style:{marginBottom:20}},
+            h('div',{style:{fontSize:13,fontWeight:700,color:"#0f172a",marginBottom:4}},"👷 Ejecutores / Empleados"),
+            h('div',{style:{fontSize:12,color:"#64748b",marginBottom:10}},"Son las personas que ejecutan las tareas asignadas."),
+            h(PersonList,{list:ejs,onRemove:i=>setEjs(e=>e.filter((_,idx)=>idx!==i)),onAdd:n=>setEjs(e=>[...e,n]),nuevoKey:"ej"})),
+          h('div',{style:{height:1,background:"#f1f5f9",marginBottom:20}}),
+          // Responsables
+          h('div',{style:{marginBottom:20}},
+            h('div',{style:{fontSize:13,fontWeight:700,color:"#0f172a",marginBottom:4}},"🏗️ Responsable Intendencia"),
+            h('div',{style:{fontSize:12,color:"#64748b",marginBottom:8}},"Recibe los nuevos reclamos de intendencia."),
+            h('input',{value:cfg.mailIntendencia||"",onChange:e=>setCfg(c=>({...c,mailIntendencia:e.target.value})),placeholder:"email@club.com",type:"email",style:iS()})),
+          h('div',{style:{marginBottom:20}},
+            h('div',{style:{fontSize:13,fontWeight:700,color:"#0f172a",marginBottom:4}},"💼 Responsable Administración"),
+            h('div',{style:{fontSize:12,color:"#64748b",marginBottom:8}},"Recibe los nuevos reclamos de administración."),
+            h('input',{value:cfg.mailAdmin||"",onChange:e=>setCfg(c=>({...c,mailAdmin:e.target.value})),placeholder:"email@club.com",type:"email",style:iS()})),
+          h('div',{style:{height:1,background:"#f1f5f9",marginBottom:20}}),
+          // Directivos
+          h('div',{style:{marginBottom:20}},
+            h('div',{style:{fontSize:13,fontWeight:700,color:"#0f172a",marginBottom:4}},"🎖️ Directivos — Intendencia"),
+            h('div',{style:{fontSize:12,color:"#64748b",marginBottom:10}},"Reciben escalados de temas de intendencia."),
+            h(PersonList,{list:cfg.directivosIntendencia||[],onRemove:i=>setCfg(c=>({...c,directivosIntendencia:c.directivosIntendencia.filter((_,idx)=>idx!==i)})),onAdd:n=>setCfg(c=>({...c,directivosIntendencia:[...(c.directivosIntendencia||[]),n]})),nuevoKey:"di"})),
+          h('div',{style:{marginBottom:4}},
+            h('div',{style:{fontSize:13,fontWeight:700,color:"#0f172a",marginBottom:4}},"🎖️ Directivos — Administración"),
+            h('div',{style:{fontSize:12,color:"#64748b",marginBottom:10}},"Reciben escalados de temas de administración."),
+            h(PersonList,{list:cfg.directivosAdmin||[],onRemove:i=>setCfg(c=>({...c,directivosAdmin:c.directivosAdmin.filter((_,idx)=>idx!==i)})),onAdd:n=>setCfg(c=>({...c,directivosAdmin:[...(c.directivosAdmin||[]),n]})),nuevoKey:"da"}))),
+
+        // TAB ESCALADO
+        tab==="escalado" && h('div',null,
+          h('div',{style:{fontSize:13,fontWeight:700,color:"#0f172a",marginBottom:12}},"Reglas de escalado automático"),
+          h('div',{style:{background:"#f8fafc",borderRadius:12,overflow:"hidden",marginBottom:16}},
+            h('table',{style:{width:"100%",borderCollapse:"collapse"}},
+              h('thead',null,h('tr',null,
+                ...["Criticidad","1er recordatorio","Escalado a directivo"].map(hd=>
+                  h('th',{key:hd,style:{padding:"10px 14px",fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:0.5,textAlign:"left",background:"#f1f5f9"}},hd)))),
+              h('tbody',null,
+                ...Object.entries(ESCALADO).map(([crit,p],i)=>{
+                  const pri = PRIS.find(x=>x.id===crit);
+                  return h('tr',{key:crit,style:{borderTop:"1px solid #f1f5f9",background:i%2===0?"white":"#fafafa"}},
+                    h('td',{style:{padding:"10px 14px"}},h('span',{style:{display:"inline-block",padding:"2px 8px",borderRadius:20,fontSize:12,fontWeight:600,color:pri?.color,background:pri?.color+"22"}},pri?.label)),
+                    h('td',{style:{padding:"10px 14px",fontSize:13,color:"#374151"}},p.recordatorio+" día"+(p.recordatorio>1?"s":"")),
+                    h('td',{style:{padding:"10px 14px",fontSize:13,color:"#374151"}},p.directivo+" día"+(p.directivo>1?"s":"")));
+                })))),
+          h('div',{style:{background:"#eff6ff",border:"1.5px solid #bfdbfe",borderRadius:10,padding:12,fontSize:12,color:"#1d4ed8",lineHeight:1.6}},
+            "💡 Los plazos se cuentan desde la creación del reclamo. Si el ejecutor rechaza, el tiempo restante no se renueva — el intendente tiene menos tiempo para reasignar.")),
+
+        // TAB SISTEMA
+        tab==="sistema" && h('div',null,
+          h('div',{style:{marginBottom:16}},
+            h('div',{style:{fontSize:13,fontWeight:700,color:"#0f172a",marginBottom:4}},"🔗 Google Apps Script URL"),
+            h('div',{style:{fontSize:12,color:"#64748b",marginBottom:8}},"URL del script que envía los emails."),
+            h('input',{value:cfg.scriptUrl||"",onChange:e=>setCfg(c=>({...c,scriptUrl:e.target.value})),placeholder:"https://script.google.com/macros/s/.../exec",style:iS()}))),
+
+        h('button',{onClick:save,style:{width:"100%",padding:"13px",background:saved?"#22c55e":"linear-gradient(135deg,#0f172a,#1e3a5f)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700,transition:"background 0.3s",marginTop:20}},saved?"✅ Guardado":"Guardar configuración"))));
 }
 
 // ── KANBAN ─────────────────────────────────────────────────────────────────
@@ -704,7 +770,12 @@ function Kanban({recs, onEdit}) {
 }
 
 // ── PANEL ADMIN ────────────────────────────────────────────────────────────
-function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores}) {
+function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
+  // Auto-refresh every 30 seconds
+  useEffect(()=>{
+    const interval = setInterval(()=>{ if(onRefresh) onRefresh(); }, 30000);
+    return ()=>clearInterval(interval);
+  },[]);
   const [filtros,setFiltros] = useState({estado:"",cat:"",sector:"",q:""});
   const [modal,setModal] = useState(null);
   const [view,setView] = useState("lista");
@@ -726,6 +797,14 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores}) {
     enCurso:recs.filter(r=>r.estadoAvance==="iniciada").length,
     demoradas:recs.filter(r=>r.estadoAvance==="demorada"||(!["completada","consolidada"].includes(r.estadoAvance)&&r.fechaCierre&&new Date(r.fechaCierre)<new Date())).length,
     completadas:recs.filter(r=>r.estadoAvance==="completada").length,
+  };
+
+  const testAlerts = async (diasSimulados) => {
+    // Runs checkAlerts but with simulated days passed
+    const originalDiasDesde = window._diasDesdeOverride;
+    window._diasDesdeOverride = diasSimulados;
+    await checkAlerts();
+    window._diasDesdeOverride = null;
   };
 
   const checkAlerts = async () => {
@@ -759,6 +838,7 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores}) {
         h('h1',{style:{fontFamily:"'Playfair Display',serif",color:"white",fontSize:22,margin:0}},"Intendencia del Club")),
       h('div',{style:{display:"flex",gap:8}},
         h('button',{onClick:()=>setShowCfg(true),style:{padding:"8px 14px",background:"rgba(255,255,255,0.1)",color:"white",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600}},"⚙️ Configuración"),
+        h('button',{onClick:()=>{const d=prompt("Simular cuántos días transcurridos (ej: 4):");if(d&&!isNaN(d))testAlerts(Number(d));},style:{padding:"8px 14px",background:"rgba(255,255,255,0.1)",color:"white",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600}},"🧪 Test"),
         h('button',{onClick:checkAlerts,disabled:checking,style:{padding:"8px 14px",background:checking?"#475569":"#f97316",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600}},checking?"Verificando...":"⚠️ Revisar alertas"))),
     // Stats
     h('div',{style:{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:12,padding:"18px 24px 0"}},
@@ -785,7 +865,7 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores}) {
     // Lista
     view==="lista" && h('div',{style:{padding:"0 24px 24px",overflowX:"auto"}},
       h('table',{style:{width:"100%",borderCollapse:"separate",borderSpacing:"0 5px"}},
-        h('thead',null,h('tr',null,...["Nº","Fecha","Sector","Tipo","Detalle","Criticidad","Estado","Ejecutor","Status","Cierre","Timing",""].map(hd=>
+        h('thead',null,h('tr',null,...["Nº","Fecha","Sector","Tipo","Detalle","Criticidad socio→int","Estado","Ejecutor","Status","Cierre","Timing",""].map(hd=>
           h('th',{key:hd,style:{textAlign:"left",padding:"8px 10px",fontSize:11,color:"#94a3b8",fontWeight:600,letterSpacing:0.5,textTransform:"uppercase"}},hd)))),
         h('tbody',null,
           !filtrados.length && h('tr',null,h('td',{colSpan:12,style:{textAlign:"center",padding:40,color:"#94a3b8"}},"No hay reclamos")),
@@ -793,12 +873,27 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores}) {
             const cat=CATS[r.cat]; const crit=PRIS.find(p=>p.id===(r.criticidad||r.pri));
             const est=ESTADOS.find(e=>e.id===r.estadoAvance); const t=getTiming(r);
             return h('tr',{key:r.id,style:{background:"white",boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}},
-              h('td',{style:{padding:"11px 10px",borderRadius:"10px 0 0 10px"}},h('span',{style:{fontFamily:"monospace",fontSize:11,fontWeight:700,color:"#3b82f6"}},r.numero)),
+              h('td',{style:{padding:"11px 10px",borderRadius:"10px 0 0 10px"}},
+                h('span',{style:{fontFamily:"monospace",fontSize:11,fontWeight:700,color:"#3b82f6"}},r.numero),
+                r.reclamosHijos?.length > 0 && h('div',{style:{fontSize:10,color:"#8b5cf6",fontWeight:600,marginTop:2}},
+                  "🔗 "+( r.reclamosHijos.length+1)+" reclamos")),
               h('td',{style:{padding:"11px 10px",fontSize:11,color:"#64748b",whiteSpace:"nowrap"}},fd(r.createdAt)),
               h('td',{style:{padding:"11px 10px",fontSize:12,fontWeight:500,maxWidth:100}},r.sector),
               h('td',{style:{padding:"11px 10px",fontSize:13}},cat?.icon),
               h('td',{style:{padding:"11px 10px",fontSize:11,color:"#64748b",maxWidth:130,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},r.sub),
-              h('td',{style:{padding:"11px 10px"}},h(Badge,{color:crit?.color,label:crit?.label,sm:true})),
+              h('td',{style:{padding:"11px 10px"}},
+                (() => {
+                  const socio = PRIS.find(p=>p.id===r.pri);
+                  const intel = PRIS.find(p=>p.id===r.criticidad);
+                  if(!intel) return h(Badge,{color:socio?.color,label:socio?.label,sm:true});
+                  if(socio?.id===intel?.id) return h(Badge,{color:intel.color,label:intel.label,sm:true});
+                  const arrow = PRIS.indexOf(intel) < PRIS.indexOf(socio) ? "↑" : "↓";
+                  const arrowColor = arrow==="↑"?"#ef4444":"#22c55e";
+                  return h('div',{style:{display:"flex",alignItems:"center",gap:4}},
+                    h('span',{style:{fontSize:10,color:"#94a3b8"},title:"Criticidad del socio"},socio?.label),
+                    h('span',{style:{color:arrowColor,fontWeight:700,fontSize:12}},arrow),
+                    h(Badge,{color:intel.color,label:intel.label,sm:true}));
+                })()),
               h('td',{style:{padding:"11px 10px"}},h(Badge,{color:est?.color,label:est?.label,sm:true})),
               h('td',{style:{padding:"11px 10px",fontSize:11,color:"#64748b"}},r.ejecutorNombre||"—"),
               h('td',{style:{padding:"11px 10px"}},
@@ -848,6 +943,74 @@ function Login({onLogin, onSeguimiento}) {
         h('button',{onClick:go,style:{width:"100%",padding:"13px",background:"#0f172a",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:15,fontWeight:700}},"Ingresar →"))));
 }
 
+// ── CALIFICAR VIEW ────────────────────────────────────────────────────────
+function CalificarView({recId, recs, setRecs, loaded}) {
+  const rec = recs.find(r=>r.id===recId);
+  const [stars,setStars] = useState(0);
+  const [motivo,setMotivo] = useState("");
+  const [done,setDone] = useState(false);
+  const [sending,setSending] = useState(false);
+  const appUrl = window.location.href.split("?")[0];
+
+  const submitCalif = async () => {
+    if(!stars) return;
+    if(stars <= 3 && !motivo.trim()) return;
+    setSending(true);
+    const mailCfg = getMailConfig();
+    const updated = {...rec, calificacion:stars, motivoCalificacion:motivo,
+      estadoAvance: stars >= 4 ? "completada" : rec.estadoAvance,
+      comentarios:[...(rec.comentarios||[]),{texto:`Usuario calificó con ${stars}⭐${motivo?". Motivo: "+motivo:""}`,fecha:new Date().toISOString(),autor:"Sistema"}]};
+    await sbUpsert(updated);
+    setRecs(prev=>prev.map(r=>r.id===recId?updated:r));
+    const respMail = getResponsableMail(rec.cat) || NOTIFY_EMAIL;
+    await sendEmail({to:[respMail, mailCfg.directivo].filter(Boolean),
+      subject:`[Club] ⭐ Calificación ${stars}/5 — ${rec.numero}`,
+      body:`El solicitante calificó con ${stars}⭐. Sector: ${rec.sector}. ${motivo?"Comentario: "+motivo+"\n":""}Solicitante: ${rec.nombre}`});
+    setSending(false);
+    setDone(true);
+  };
+
+  if(!loaded) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:18}},"Cargando...");
+
+  if(!rec) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
+    h('div',{style:{background:"white",borderRadius:20,padding:40,maxWidth:420,width:"100%",textAlign:"center"}},
+      h('div',{style:{fontSize:48,marginBottom:16}},"🔍"),
+      h('p',{style:{color:"#64748b"}},"Reclamo no encontrado.")));
+
+  if(done) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
+    h('div',{style:{background:"white",borderRadius:20,padding:40,maxWidth:420,width:"100%",textAlign:"center",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}},
+      h('div',{style:{fontSize:64,marginBottom:16}},stars>=4?"🎉":"📨"),
+      h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:24,color:"#0f172a",margin:"0 0 12px"}},stars>=4?"¡Gracias por tu calificación!":"Solicitud de reapertura enviada"),
+      h('p',{style:{color:"#64748b",fontSize:15,lineHeight:1.6}},stars>=4?"Tu feedback fue registrado. ¡Nos alegra que el problema haya quedado resuelto!":"El equipo revisará tu solicitud y reabrirá el reclamo si corresponde."),
+      h('p',{style:{color:"#94a3b8",fontSize:13,marginTop:16}},"Podés cerrar esta ventana.")));
+
+  return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",padding:"20px 16px 40px"}},
+    h('div',{style:{textAlign:"center",marginBottom:24,paddingTop:20}},
+      h('div',{style:{fontSize:11,letterSpacing:3,color:"#93c5fd",textTransform:"uppercase",marginBottom:8}},"Calificación de Resolución"),
+      h('h1',{style:{fontFamily:"'Playfair Display',serif",fontSize:26,color:"white",fontWeight:900}},rec.numero),
+      h('div',{style:{width:40,height:3,background:"#3b82f6",margin:"10px auto 0",borderRadius:2}})),
+    h('div',{style:{maxWidth:480,margin:"0 auto"}},
+      h('div',{style:{background:"white",borderRadius:16,padding:"24px 20px"}},
+        h('div',{style:{background:"#f0fdf4",border:"1.5px solid #bbf7d0",borderRadius:12,padding:"14px 16px",marginBottom:20}},
+          h('div',{style:{fontSize:11,color:"#15803d",fontWeight:700,marginBottom:6,textTransform:"uppercase"}},"✅ Resolución"),
+          h('div',{style:{fontSize:13,color:"#166534",lineHeight:1.6}},rec.descripcionResolucion||"Tarea completada."),
+          rec.adjuntosResolucion?.filter(a=>a.url).length > 0 && h('div',{style:{marginTop:10,display:"flex",gap:8,flexWrap:"wrap"}},
+            ...rec.adjuntosResolucion.filter(a=>a.url).map((a,i)=>
+              h('a',{key:i,href:a.url,target:"_blank",style:{display:"inline-flex",alignItems:"center",gap:4,padding:"5px 10px",background:"#dcfce7",borderRadius:8,fontSize:12,color:"#15803d",fontWeight:600,textDecoration:"none"}},
+                a.tipo?.startsWith("video")?"🎥":"📷"," Ver")))),
+        h('div',{style:{textAlign:"center",marginBottom:20}},
+          h('div',{style:{fontSize:14,fontWeight:600,color:"#374151",marginBottom:12}},"¿Cómo calificás la resolución?"),
+          h('div',{style:{display:"flex",justifyContent:"center",gap:8}},
+            ...[1,2,3,4,5].map(s=>h('button',{key:s,onClick:()=>setStars(s),
+              style:{fontSize:36,background:"none",border:"none",cursor:"pointer",opacity:s<=stars?1:0.3,transform:s<=stars?"scale(1.1)":"scale(1)",transition:"all 0.15s"}},"⭐")))),
+        stars > 0 && stars <= 3 && h('div',{style:{marginBottom:16}},
+          h('label',{style:{display:"block",fontSize:12,fontWeight:600,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:0.5}},"Contanos qué salió mal *"),
+          h('textarea',{value:motivo,onChange:e=>setMotivo(e.target.value),rows:4,placeholder:"Describí por qué no quedaste conforme...",style:{width:"100%",padding:"10px 14px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:14,resize:"vertical",outline:"none",boxSizing:"border-box"}})),
+        stars > 0 && h('button',{onClick:submitCalif,disabled:sending||(stars<=3&&!motivo.trim()),
+          style:{width:"100%",padding:"14px",background:(sending||(stars<=3&&!motivo.trim()))?"#94a3b8":stars>=4?"linear-gradient(135deg,#22c55e,#15803d)":"linear-gradient(135deg,#ef4444,#dc2626)",color:"white",border:"none",borderRadius:12,fontSize:15,fontWeight:700,cursor:"pointer"}},
+          sending?"Enviando...":stars>=4?"✅ Confirmar resolución":"📨 Solicitar reapertura"))));
+}
+
 // ── APP ROOT ───────────────────────────────────────────────────────────────
 function App() {
   // Detect URL params immediately so seguimiento works without login
@@ -860,9 +1023,9 @@ function App() {
     : "socio";
 
   const [view,setView]           = useState(_initView);
-  const [auth,setAuth]           = useState(false);
+  const [auth,setAuth]           = useState(sessionStorage.getItem('panelAuth')==='1');
   const [recs,setRecs]           = useState([]);
-  const [ejecutores,setEjecutores] = useState([{nombre:"Sebastián Falk",mail:"edifalk@gmail.com"}]);
+  const [ejecutores,setEjecutores] = useState([]);
   const [loaded,setLoaded]       = useState(false);
 
   useEffect(()=>{
@@ -995,76 +1158,7 @@ Te avisaremos cuando esté resuelto.
       h('p',{style:{color:"#64748b",fontSize:15,lineHeight:1.6}},"Tu respuesta fue registrada. El responsable fue notificado y reasignará la tarea."),
       h('p',{style:{color:"#94a3b8",fontSize:13,marginTop:16}},"Podés cerrar esta ventana.")));
 
-  // Vista calificación
-  if(view && view.startsWith("calificar_")) {
-    const recId = Number(view.replace("calificar_",""));
-    const rec = recs.find(r=>r.id===recId);
-    const [stars,setStars] = useState(0);
-    const [motivo,setMotivo] = useState("");
-    const [done,setDone] = useState(false);
-    const [sending,setSending] = useState(false);
-
-    const submitCalif = async () => {
-      if(!stars) return;
-      if(stars <= 3 && !motivo.trim()) return;
-      setSending(true);
-      const mailCfg = getMailConfig();
-      const updated = {...rec, calificacion:stars, motivoCalificacion:motivo,
-        estadoAvance: stars >= 4 ? "completada" : rec.estadoAvance,
-        comentarios:[...(rec.comentarios||[]),{texto:`Usuario calificó con ${stars}⭐${motivo?". Motivo: "+motivo:""}`,fecha:new Date().toISOString(),autor:"Sistema"}]};
-      await sbUpsert(updated);
-      setRecs(prev=>prev.map(r=>r.id===recId?updated:r));
-      const respMail = getResponsableMail(rec.cat) || NOTIFY_EMAIL;
-      await sendEmail({to:[respMail, mailCfg.directivo].filter(Boolean),
-        subject:`[Club] ⭐ Calificación ${stars}/5 — ${rec.numero}`,
-        body:`El solicitante calificó con ${stars}⭐. Sector: ${rec.sector}. ${motivo?"Comentario: "+motivo+"\n":""}Solicitante: ${rec.nombre}`});
-      setSending(false);
-      setDone(true);
-    };
-
-    if(!rec && loaded) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
-      h('div',{style:{background:"white",borderRadius:20,padding:40,maxWidth:420,width:"100%",textAlign:"center"}},
-        h('div',{style:{fontSize:48,marginBottom:16}},"🔍"),
-        h('p',{style:{color:"#64748b"}},"Reclamo no encontrado.")));
-
-    if(done) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
-      h('div',{style:{background:"white",borderRadius:20,padding:40,maxWidth:420,width:"100%",textAlign:"center",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}},
-        h('div',{style:{fontSize:64,marginBottom:16}},stars>=4?"🎉":"📨"),
-        h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:24,color:"#0f172a",margin:"0 0 12px"}},stars>=4?"¡Gracias por tu calificación!":"Solicitud de reapertura enviada"),
-        h('p',{style:{color:"#64748b",fontSize:15,lineHeight:1.6}},stars>=4?"Tu feedback fue registrado. ¡Nos alegra que el problema haya quedado resuelto!":"El equipo revisará tu solicitud y reabrirá el reclamo si corresponde."),
-        h('p',{style:{color:"#94a3b8",fontSize:13,marginTop:16}},"Podés cerrar esta ventana.")));
-
-    return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",padding:"20px 16px 40px"}},
-      h('div',{style:{textAlign:"center",marginBottom:24,paddingTop:20}},
-        h('div',{style:{fontSize:11,letterSpacing:3,color:"#93c5fd",textTransform:"uppercase",marginBottom:8}},"Calificación de Resolución"),
-        h('h1',{style:{fontFamily:"'Playfair Display',serif",fontSize:26,color:"white",fontWeight:900}},rec?.numero||""),
-        h('div',{style:{width:40,height:3,background:"#3b82f6",margin:"10px auto 0",borderRadius:2}})),
-      h('div',{style:{maxWidth:480,margin:"0 auto"}},
-        h('div',{style:{background:"white",borderRadius:16,padding:"24px 20px"}},
-          // Resumen resolución
-          rec && h('div',{style:{background:"#f0fdf4",border:"1.5px solid #bbf7d0",borderRadius:12,padding:"14px 16px",marginBottom:20}},
-            h('div',{style:{fontSize:11,color:"#15803d",fontWeight:700,marginBottom:6,textTransform:"uppercase"}},"✅ Resolución"),
-            h('div',{style:{fontSize:13,color:"#166534",lineHeight:1.6}},rec.descripcionResolucion||"Tarea completada."),
-            rec.adjuntosResolucion?.filter(a=>a.url).length > 0 && h('div',{style:{marginTop:10,display:"flex",gap:8,flexWrap:"wrap"}},
-              ...rec.adjuntosResolucion.filter(a=>a.url).map((a,i)=>
-                h('a',{key:i,href:a.url,target:"_blank",style:{display:"inline-flex",alignItems:"center",gap:4,padding:"5px 10px",background:"#dcfce7",borderRadius:8,fontSize:12,color:"#15803d",fontWeight:600,textDecoration:"none"}},
-                  a.tipo?.startsWith("video")?"🎥":"📷"," Ver")))),
-          // Stars
-          h('div',{style:{textAlign:"center",marginBottom:20}},
-            h('div',{style:{fontSize:14,fontWeight:600,color:"#374151",marginBottom:12}},"¿Cómo calificás la resolución?"),
-            h('div',{style:{display:"flex",justifyContent:"center",gap:8}},
-              ...[1,2,3,4,5].map(s=>h('button',{key:s,onClick:()=>setStars(s),
-                style:{fontSize:36,background:"none",border:"none",cursor:"pointer",opacity:s<=stars?1:0.3,transform:s<=stars?"scale(1.1)":"scale(1)",transition:"all 0.15s"}},
-                "⭐")))),
-          // Motivo si baja calificación
-          stars > 0 && stars <= 3 && h('div',{style:{marginBottom:16}},
-            h('label',{style:{display:"block",fontSize:12,fontWeight:600,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:0.5}},"Contanos qué salió mal *"),
-            h('textarea',{value:motivo,onChange:e=>setMotivo(e.target.value),rows:4,placeholder:"Describí por qué no quedaste conforme...",style:{width:"100%",padding:"10px 14px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:14,resize:"vertical",outline:"none",boxSizing:"border-box"}})),
-          // Botón
-          stars > 0 && h('button',{onClick:submitCalif,disabled:sending||(stars<=3&&!motivo.trim()),
-            style:{width:"100%",padding:"14px",background:(sending||(stars<=3&&!motivo.trim()))?"#94a3b8":stars>=4?"linear-gradient(135deg,#22c55e,#15803d)":"linear-gradient(135deg,#ef4444,#dc2626)",color:"white",border:"none",borderRadius:12,fontSize:15,fontWeight:700,cursor:"pointer"}},
-            sending?"Enviando...":stars>=4?"✅ Confirmar resolución":"📨 Solicitar reapertura"))));
-  }
+  if(view && view.startsWith("calificar_")) { return h(CalificarView,{recId:Number(view.replace("calificar_","")),recs,setRecs,loaded}); }
 
   if(view==="rechazar") return h(PantallaRechazo,{onConfirm:handleRechazar});
 
@@ -1141,8 +1235,8 @@ Te avisaremos cuando esté resuelto.
       h('button',{onClick:()=>setView("socio"),style:{padding:"8px 16px",borderRadius:20,border:"none",background:view==="socio"?"#3b82f6":"rgba(255,255,255,0.9)",color:view==="socio"?"white":"#374151",cursor:"pointer",fontSize:13,fontWeight:600,boxShadow:"0 2px 12px rgba(0,0,0,0.2)"}},"📋 Formulario"),
       h('button',{onClick:()=>setView("admin"),style:{padding:"8px 16px",borderRadius:20,border:"none",background:view==="admin"?"#0f172a":"rgba(255,255,255,0.9)",color:view==="admin"?"white":"#374151",cursor:"pointer",fontSize:13,fontWeight:600,boxShadow:"0 2px 12px rgba(0,0,0,0.2)"}},"⚙️ Panel")),
     view==="socio" && h(FormularioSocio,{onSubmit:add,reclamos:recs}),
-    view==="admin" && !auth && h(Login,{onLogin:()=>setAuth(true),onSeguimiento:num=>setView("seguimiento_"+num)}),
-    view==="admin" && auth && h(PanelAdmin,{recs,onUpdate:upd,ejecutores,setEjecutores}));
+    view==="admin" && !auth && h(Login,{onLogin:()=>{setAuth(true);sessionStorage.setItem('panelAuth','1');},onSeguimiento:num=>setView("seguimiento_"+num)}),
+    view==="admin" && auth && h(PanelAdmin,{recs,onUpdate:upd,ejecutores,setEjecutores,onRefresh:()=>sbGetAll().then(setRecs)}));
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
