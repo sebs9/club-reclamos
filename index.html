@@ -473,6 +473,12 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
 
   const save = async () => {
     setSaveErr("");
+    // Block completada without resolution description
+    if(f.estadoAvance==="completada" && !f.descripcionResolucion.trim()) {
+      setSaveErr("Para marcar como completada debés describir qué se hizo en la tab Resolución.");
+      setTab("resolucion");
+      return;
+    }
     // Validate required fields for assignment
     if(tab==="asignacion" || tab==="gestion") {
       if(!f.ejecutorMail) { setSaveErr("Debés asignar un ejecutor antes de guardar."); return; }
@@ -505,10 +511,52 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
       const uploaded = await uploadAdjuntos(adjuntosResolucion, rec.id, "resolucion");
       adjuntosResolucion = uploaded;
     }
-    await onSave({...rec,...f,adjuntosResolucion,comentarios,nuevoComentario:undefined,
+    const savedRec = {...rec,...f,adjuntosResolucion,comentarios,nuevoComentario:undefined,
       fechaCierreConfirmada,fechaInicioOriginal,fechaOriginalCierre,ejecutorMailOriginal,fechaAsignacion,
-      updatedAt:new Date().toISOString()});
+      updatedAt:new Date().toISOString()};
+    await onSave(savedRec);
+    // Auto-notify user when marked as completada
+    if(f.estadoAvance==="completada" && rec.estadoAvance!=="completada" && f.descripcionResolucion.trim()) {
+      await notifResolucionAuto(savedRec);
+    }
     setSending(false);
+  };
+
+  const notifResolucionAuto = async (savedRec) => {
+    const appUrl = window.location.href.split("?")[0];
+    const mailCfg = getMailConfig();
+    const calificarUrl = appUrl+"?calificar="+savedRec.id;
+    const cat = CATS[savedRec.cat];
+    // Mensajes por categoría
+    const mensajeCategoria = {
+      infraestructura: "nuestro equipo de obras e infraestructura revisó y resolvió el inconveniente reportado",
+      mantenimiento: "nuestro equipo de mantenimiento atendió y solucionó el problema",
+      limpieza: "nuestro equipo de limpieza atendió la situación reportada",
+      equipamiento: "el equipamiento fue revisado y el problema fue solucionado",
+      preparacion: "el espacio fue preparado correctamente",
+      servicios: "nuestro equipo de atención al socio gestionó tu consulta",
+      cuotas: "nuestro equipo administrativo revisó y resolvió tu consulta",
+    };
+    const msgCat = mensajeCategoria[savedRec.cat] || "nuestro equipo atendió y resolvió el inconveniente";
+    const descripcion = savedRec.descripcionResolucion?.trim();
+    const fotosMensaje = savedRec.adjuntosResolucion?.filter(a=>a.url).length > 0
+      ? "Adjuntamos fotos de la resolución para que puedas verificar el trabajo realizado."
+      : "";
+    if(savedRec.email) {
+      await sendEmail({to:savedRec.email,
+        subject:`[Club] ✅ Tu reclamo fue resuelto — ${savedRec.numero}`,
+        body:`Hola ${savedRec.nombre},\n\nNos alegra informarte que el problema que reportaste en ${savedRec.sector} fue resuelto. ${msgCat}.\n\n${descripcion?"Lo que se hizo:\n"+descripcion+"\n\n":""}${fotosMensaje?fotosMensaje+"\n\n":""}Podés calificar la resolución haciendo clic acá:\n${calificarUrl}\n\nGracias por ayudarnos a mejorar el club.\n\n— Equipo de Intendencia`});
+    }
+    // Notify directivos and responsable
+    const dirMails = getDirectivos(savedRec.cat).map(d=>d.mail);
+    const respMail = getResponsableMail(savedRec.cat);
+    await sendEmail({to:[respMail,...dirMails].filter(Boolean),
+      subject:`[Club] ✅ Tarea completada — ${savedRec.numero}: ${savedRec.sector}`,
+      body:`La tarea ${savedRec.numero} fue marcada como completada.
+
+Sector: ${savedRec.sector}
+Ejecutor: ${savedRec.ejecutorNombre||"—"}
+Resolución: ${descripcion||"—"}`});
   };
 
   const notifResolucion = async () => {
@@ -635,7 +683,7 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
                       : h('span',{style:{maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},a.nombre),
                 h('button',{onClick:()=>setF(p=>({...p,adjuntosResolucion:p.adjuntosResolucion.filter((_,idx)=>idx!==i)})),style:{background:"none",border:"none",cursor:"pointer",color:"#ef4444",fontSize:14,padding:0}},"✕")))),
             h('button',{onClick:()=>fileRef.current.click(),style:{padding:"8px 16px",borderRadius:8,border:"1.5px dashed #e2e8f0",background:"transparent",color:"#64748b",cursor:"pointer",fontSize:13}},"📎 Adjuntar foto / video")),
-          f.estadoAvance==="completada" && h('button',{onClick:()=>{if(!f.descripcionResolucion.trim()){setSaveErr("Completá la descripción de resolución antes de notificar.");return;}notifResolucion();},disabled:sending,style:{width:"100%",padding:"12px",background:"linear-gradient(135deg,#22c55e,#15803d)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700,marginBottom:12}},sending?"Enviando...":"📧 Notificar resolución al usuario")),
+          f.estadoAvance==="completada" && h('div',{style:{background:"#f0fdf4",border:"1.5px solid #bbf7d0",borderRadius:8,padding:"10px 14px",fontSize:12,color:"#15803d",marginBottom:8}},"✅ Al guardar como completada se notificará automáticamente al usuario.")),
 
         // TAB HISTORIAL
         tab==="historial" && h('div',null,
@@ -1010,31 +1058,70 @@ function CalificarView({recId, recs, setRecs, loaded}) {
       h('p',{style:{color:"#64748b",fontSize:15,lineHeight:1.6}},stars>=4?"Tu feedback fue registrado. ¡Nos alegra que el problema haya quedado resuelto!":"El equipo revisará tu solicitud y reabrirá el reclamo si corresponde."),
       h('p',{style:{color:"#94a3b8",fontSize:13,marginTop:16}},"Podés cerrar esta ventana.")));
 
+  const cat = CATS[rec.cat];
+  const mensajes = {
+    infraestructura:"nuestro equipo de obras e infraestructura revisó y resolvió el inconveniente",
+    mantenimiento:"nuestro equipo de mantenimiento atendió y solucionó el problema",
+    limpieza:"nuestro equipo de limpieza atendió la situación reportada",
+    equipamiento:"el equipamiento fue revisado y el problema fue solucionado",
+    preparacion:"el espacio fue preparado correctamente",
+    servicios:"nuestro equipo de atención al socio gestionó tu consulta",
+    cuotas:"nuestro equipo administrativo revisó y resolvió tu consulta",
+  };
+  const msgCat = mensajes[rec.cat]||"nuestro equipo atendió y resolvió el inconveniente";
+  const fotos = rec.adjuntosResolucion?.filter(a=>a.url)||[];
+
   return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",padding:"20px 16px 40px"}},
     h('div',{style:{textAlign:"center",marginBottom:24,paddingTop:20}},
-      h('div',{style:{fontSize:11,letterSpacing:3,color:"#93c5fd",textTransform:"uppercase",marginBottom:8}},"Calificación de Resolución"),
+      h('div',{style:{fontSize:11,letterSpacing:3,color:"#93c5fd",textTransform:"uppercase",marginBottom:8}},"Resolución de Reclamo"),
       h('h1',{style:{fontFamily:"'Playfair Display',serif",fontSize:26,color:"white",fontWeight:900}},rec.numero),
-      h('div',{style:{width:40,height:3,background:"#3b82f6",margin:"10px auto 0",borderRadius:2}})),
+      h('div',{style:{width:40,height:3,background:"#22c55e",margin:"10px auto 0",borderRadius:2}})),
     h('div',{style:{maxWidth:480,margin:"0 auto"}},
       h('div',{style:{background:"white",borderRadius:16,padding:"24px 20px"}},
-        h('div',{style:{background:"#f0fdf4",border:"1.5px solid #bbf7d0",borderRadius:12,padding:"14px 16px",marginBottom:20}},
-          h('div',{style:{fontSize:11,color:"#15803d",fontWeight:700,marginBottom:6,textTransform:"uppercase"}},"✅ Resolución"),
-          h('div',{style:{fontSize:13,color:"#166534",lineHeight:1.6}},rec.descripcionResolucion||"Tarea completada."),
-          rec.adjuntosResolucion?.filter(a=>a.url).length > 0 && h('div',{style:{marginTop:10,display:"flex",gap:8,flexWrap:"wrap"}},
-            ...rec.adjuntosResolucion.filter(a=>a.url).map((a,i)=>
-              h('a',{key:i,href:a.url,target:"_blank",style:{display:"inline-flex",alignItems:"center",gap:4,padding:"5px 10px",background:"#dcfce7",borderRadius:8,fontSize:12,color:"#15803d",fontWeight:600,textDecoration:"none"}},
-                a.tipo?.startsWith("video")?"🎥":"📷"," Ver")))),
-        h('div',{style:{textAlign:"center",marginBottom:20}},
-          h('div',{style:{fontSize:14,fontWeight:600,color:"#374151",marginBottom:12}},"¿Cómo calificás la resolución?"),
-          h('div',{style:{display:"flex",justifyContent:"center",gap:8}},
+        // Mensaje cálido principal
+        h('div',{style:{textAlign:"center",marginBottom:20,paddingBottom:18,borderBottom:"1.5px solid #f1f5f9"}},
+          h('div',{style:{fontSize:40,marginBottom:10}},"✅"),
+          h('div',{style:{fontSize:16,fontWeight:700,color:"#0f172a",marginBottom:6}},"¡Hola "+rec.nombre.split(" ")[0]+"!"),
+          h('div',{style:{fontSize:14,color:"#475569",lineHeight:1.7}},"Nos alegra informarte que "+msgCat+" en "+rec.sector+".")),
+        // Detalle sector/tipo
+        h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16,background:"#f8fafc",borderRadius:10,padding:12}},
+          h('div',null,h('div',{style:{fontSize:10,color:"#94a3b8",fontWeight:600,marginBottom:2}},"SECTOR"),h('div',{style:{fontSize:13,fontWeight:600}},rec.sector)),
+          h('div',null,h('div',{style:{fontSize:10,color:"#94a3b8",fontWeight:600,marginBottom:2}},"TIPO"),h('div',{style:{fontSize:13}},cat?.icon+" "+cat?.label)),
+          h('div',null,h('div',{style:{fontSize:10,color:"#94a3b8",fontWeight:600,marginBottom:2}},"RECLAMO"),h('div',{style:{fontSize:13,fontFamily:"monospace",fontWeight:700,color:"#3b82f6"}},rec.numero)),
+          h('div',null,h('div',{style:{fontSize:10,color:"#94a3b8",fontWeight:600,marginBottom:2}},"RESUELTO"),h('div',{style:{fontSize:13}},fd(rec.updatedAt||rec.createdAt)))),
+        // Lo que se hizo
+        h('div',{style:{background:"#f0fdf4",border:"1.5px solid #bbf7d0",borderRadius:10,padding:"12px 14px",marginBottom:fotos.length?12:16}},
+          h('div',{style:{fontSize:11,color:"#15803d",fontWeight:700,marginBottom:6,textTransform:"uppercase",letterSpacing:0.5}},"Lo que se hizo"),
+          h('div',{style:{fontSize:13,color:"#166534",lineHeight:1.7}},
+            rec.descripcionResolucion?.trim()
+              ? rec.descripcionResolucion
+              : "El equipo verificó y resolvió el problema in situ. Si tenés alguna duda, podés calificarnos a continuación.")),
+        // Fotos si hay
+        fotos.length > 0 && h('div',{style:{marginBottom:16}},
+          h('div',{style:{fontSize:11,color:"#94a3b8",fontWeight:600,marginBottom:8,textTransform:"uppercase",letterSpacing:0.5}},"Evidencia fotográfica"),
+          h('div',{style:{display:"flex",gap:8,flexWrap:"wrap"}},
+            ...fotos.map((a,i)=>
+              a.tipo?.startsWith("video")
+                ? h('a',{key:i,href:a.url,target:"_blank",style:{display:"inline-flex",alignItems:"center",gap:4,padding:"8px 14px",background:"#f1f5f9",borderRadius:8,fontSize:13,color:"#374151",fontWeight:600,textDecoration:"none"}},"🎥 Ver video")
+                : h('a',{key:i,href:a.url,target:"_blank"},
+                    h('img',{src:a.url,alt:"Evidencia",style:{width:90,height:90,objectFit:"cover",borderRadius:8,border:"1.5px solid #e2e8f0"}}))))),
+        // Calificación
+        h('div',{style:{textAlign:"center",marginBottom:stars>0&&stars<=3?0:16}},
+          h('div',{style:{fontSize:14,fontWeight:600,color:"#374151",marginBottom:4}},"¿Cómo calificás la resolución?"),
+          h('div',{style:{fontSize:12,color:"#94a3b8",marginBottom:12}},"Tu opinión nos ayuda a mejorar el servicio"),
+          h('div',{style:{display:"flex",justifyContent:"center",gap:6}},
             ...[1,2,3,4,5].map(s=>h('button',{key:s,onClick:()=>setStars(s),
-              style:{fontSize:36,background:"none",border:"none",cursor:"pointer",opacity:s<=stars?1:0.3,transform:s<=stars?"scale(1.1)":"scale(1)",transition:"all 0.15s"}},"⭐")))),
-        stars > 0 && stars <= 3 && h('div',{style:{marginBottom:16}},
+              style:{fontSize:34,background:"none",border:"none",cursor:"pointer",opacity:s<=stars?1:0.25,transform:s<=stars?"scale(1.15)":"scale(1)",transition:"all 0.15s"}},"⭐")))),
+        stars > 0 && stars <= 3 && h('div',{style:{marginBottom:14,marginTop:14}},
           h('label',{style:{display:"block",fontSize:12,fontWeight:600,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:0.5}},"Contanos qué salió mal *"),
-          h('textarea',{value:motivo,onChange:e=>setMotivo(e.target.value),rows:4,placeholder:"Describí por qué no quedaste conforme...",style:{width:"100%",padding:"10px 14px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:14,resize:"vertical",outline:"none",boxSizing:"border-box"}})),
+          h('textarea',{value:motivo,onChange:e=>setMotivo(e.target.value),rows:4,placeholder:"Describí por qué no quedaste conforme con la resolución...",style:{width:"100%",padding:"10px 14px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:14,resize:"vertical",outline:"none",boxSizing:"border-box"}})),
         stars > 0 && h('button',{onClick:submitCalif,disabled:sending||(stars<=3&&!motivo.trim()),
-          style:{width:"100%",padding:"14px",background:(sending||(stars<=3&&!motivo.trim()))?"#94a3b8":stars>=4?"linear-gradient(135deg,#22c55e,#15803d)":"linear-gradient(135deg,#ef4444,#dc2626)",color:"white",border:"none",borderRadius:12,fontSize:15,fontWeight:700,cursor:"pointer"}},
-          sending?"Enviando...":stars>=4?"✅ Confirmar resolución":"📨 Solicitar reapertura"))));
+          style:{width:"100%",padding:"14px",marginTop:12,background:(sending||(stars<=3&&!motivo.trim()))?"#94a3b8":stars>=4?"linear-gradient(135deg,#22c55e,#15803d)":"linear-gradient(135deg,#ef4444,#dc2626)",color:"white",border:"none",borderRadius:12,fontSize:15,fontWeight:700,cursor:"pointer"}},
+          sending?"Enviando...":stars>=4?"✅ Confirmar que quedó resuelto":"📨 Solicitar reapertura"),
+        // Separador y opción de reabrir siempre visible al pie
+        h('div',{style:{marginTop:20,paddingTop:16,borderTop:"1px solid #f1f5f9",textAlign:"center"}},
+          h('div',{style:{fontSize:12,color:"#94a3b8",marginBottom:8}},"¿El problema persiste o no quedaste conforme?"),
+          h('button',{onClick:()=>setStars(1),style:{fontSize:13,color:"#f97316",background:"none",border:"none",cursor:"pointer",textDecoration:"underline",fontWeight:600}},"Solicitar reapertura del reclamo")))));
 }
 
 // ── APP ROOT ───────────────────────────────────────────────────────────────
@@ -1271,4 +1358,5 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
+
 
