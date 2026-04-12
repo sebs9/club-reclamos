@@ -17,10 +17,11 @@ select,input,textarea,button{font-family:'DM Sans',sans-serif}
 <div id="root"></div>
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
-const NOTIFY_EMAIL   = "edifalk@gmail.com";
+const NOTIFY_EMAIL   = ""; // Set in ⚙️ Configuración
 
 // Plazos de escalado por criticidad (días)
 const ESCALADO = {
+  mega_urgente: { recordatorio: 1/144, directivo: 1/72 }, // 10min / 20min
   urgente: { recordatorio: 1,  directivo: 2  },
   alta:    { recordatorio: 2,  directivo: 4  },
   media:   { recordatorio: 3,  directivo: 7  },
@@ -47,8 +48,18 @@ function isAdminCat(cat) {
 }
 
 function getResponsableMail(cat) {
-  const cfg = getMailConfig();
-  return isAdminCat(cat) ? cfg.admin : cfg.intendencia;
+  const cfg = ls.get("config") || {};
+  // Check category-specific config first
+  const catCfg = (cfg.categoriaConfig||{})[cat];
+  if(catCfg?.responsable) return catCfg.responsable;
+  // Fallback to area config
+  return isAdminCat(cat) ? (cfg.mailAdmin||"") : (cfg.mailIntendencia||"");
+}
+function getDirectivosByCat(cat) {
+  const cfg = ls.get("config") || {};
+  const catCfg = (cfg.categoriaConfig||{})[cat];
+  if(catCfg?.directivos?.length) return catCfg.directivos;
+  return getDirectivos(cat);
 }
 
 function diasDesde(isoDate) {
@@ -150,7 +161,13 @@ const CATS = {
   cuotas:{id:"cuotas",label:"Cuotas & Aranceles",icon:"💳",resp:{nombre:"— Por configurar —",mail:""}},
 };
 
-const PRIS = [{id:"urgente",label:"Urgente",color:"#ef4444",dias:1},{id:"alta",label:"Alta",color:"#f97316",dias:3},{id:"media",label:"Media",color:"#eab308",dias:7},{id:"baja",label:"Baja",color:"#22c55e",dias:14}];
+const PRIS = [
+  {id:"mega_urgente",label:"🔴 Mega urgente",color:"#7f1d1d",dias:0},
+  {id:"urgente",label:"Urgente",color:"#ef4444",dias:1},
+  {id:"alta",label:"Alta",color:"#f97316",dias:3},
+  {id:"media",label:"Media",color:"#eab308",dias:7},
+  {id:"baja",label:"Baja",color:"#22c55e",dias:14},
+];
 
 const ESTADOS = [
   {id:"bajo_analisis", label:"Bajo Análisis", color:"#0ea5e9"},
@@ -255,6 +272,18 @@ async function uploadAdjuntos(adjuntos, reclamoId, prefijo) {
   return urls;
 }
 
+async function sbClearAll() {
+  try {
+    // Delete all rows from reclamos table
+    const r = await fetch(SUPABASE_URL+"/rest/v1/reclamos?id=gte.0", {
+      method: "DELETE",
+      headers: {...SB_HEADERS, "Prefer":"return=minimal"},
+    });
+    console.log("sbClearAll status:", r.status);
+    return r.ok;
+  } catch(e) { console.error("sbClearAll error:", e); return false; }
+}
+
 // ── EMAIL ──────────────────────────────────────────────────────────────────
 async function sendEmail({to, cc, subject, body}) {
   const cfg = ls.get("config") || {};
@@ -282,19 +311,18 @@ async function detectarDuplicados(nuevoRec, todosRecs) {
 
   // Use AI to compare descriptions
   try {
-    const prompt = `Analizá si el nuevo reclamo es similar a alguno de los existentes.
+    // Only compare descriptions - sector/cat match already filtered
+    const prompt = `Compará la descripción del nuevo reclamo con los existentes. Evaluá similitud SOLO por descripción, ignorando sector/categoría que ya coinciden.
 
-NUEVO RECLAMO:
-- Sector: ${nuevoRec.sector}
-- Tipo: ${nuevoRec.cat} / ${nuevoRec.sub}
-- Descripción: "${nuevoRec.desc}"
+NUEVO RECLAMO [${nuevoRec.numero}]:
+"${nuevoRec.desc}"
 
 RECLAMOS EXISTENTES:
-${candidatos.map((r,i)=>`${i+1}. [${r.numero}] ${r.sub} - "${r.desc}"`).join("\n")}
+${candidatos.map((r,i)=>`${i+1}. [${r.numero}] "${r.desc}"`).join("\n")}
 
-Respondé SOLO con JSON válido, sin texto adicional:
-{"similares": [{"numero": "R-XXXXX", "similitud": "alta|media", "razon": "breve explicación en español"}]}
-Si no hay similares, respondé: {"similares": []}`;
+Respondé SOLO con JSON válido. Marcá "alta" solo si describen claramente el mismo problema físico. "media" si son parecidos pero pueden ser distintos.
+{"similares": [{"numero": "R-XXXXX", "similitud": "alta|media", "razon": "breve explicación en español", "descExistente": "descripción del reclamo existente"}]}
+Si no hay similares reales, respondé: {"similares": []}`;
 
     const resp = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -363,7 +391,13 @@ function FormularioSocio({onSubmit, reclamos}) {
   const submit = async () => {
     if (!validate()) return;
     setSending(true);
-    const n = "R-"+Date.now().toString().slice(-6);
+    // Generate sequential number by category prefix
+    const catPrefixes = {infraestructura:"I",limpieza:"L",mantenimiento:"M",equipamiento:"E",preparacion:"P",servicios:"S",cuotas:"C"};
+    const prefix = catPrefixes[f.cat] || "R";
+    const existing = reclamos.filter(r=>r.numero?.startsWith(prefix+"-")).length;
+    const seq = String(existing+1).padStart(3,"0");
+    const total = String(reclamos.length+1).padStart(3,"0");
+    const n = prefix+"-"+total+"-"+seq;
     setNum(n);
     const catConf=CATS[f.cat], pri=PRIS.find(p=>p.id===f.pri);
     const dC=new Date(); dC.setDate(dC.getDate()+(pri?.dias||7));
@@ -509,6 +543,7 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
     estadoAvance:rec.estadoAvance||"bajo_analisis", criticidad:rec.criticidad||"",
     fechaInicioEsperado:rec.fechaInicioEsperado||"", fechaCierre:rec.fechaCierre||"",
     ejecutorMail:rec.ejecutorMail||"", ejecutorNombre:rec.ejecutorNombre||"",
+    tipoEjecutor:rec.tipoEjecutor||"interno", empresaNombre:rec.empresaNombre||"", empresaTelefono:rec.empresaTelefono||"",
     presupuesto:rec.presupuesto||"", presupuestoDetalle:rec.presupuestoDetalle||"",
     descripcionResolucion:rec.descripcionResolucion||"", evidenciaUrl:rec.evidenciaUrl||"",
     nuevoComentario:"",
@@ -539,8 +574,10 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
       setTab("resolucion");
       return;
     }
-    // Validate required fields for assignment
-    if(tab==="asignacion" || tab==="gestion") {
+    // Skip executor/date validation when linked to a project
+    const isVinculado = f.estadoAvance==="vinculado_proyecto" || f.proyectoVinculadoId;
+    // Validate required fields for assignment (only if not linked to project)
+    if(!isVinculado && (tab==="asignacion" || tab==="gestion")) {
       if(!f.ejecutorMail) { setSaveErr("Debés asignar un ejecutor antes de guardar."); return; }
       if(!f.fechaInicioEsperado && !rec.fechaInicioOriginal) { setSaveErr("La fecha de inicio es obligatoria."); return; }
       if(!f.fechaCierre && !rec.fechaOriginalCierre) { setSaveErr("La fecha de cierre es obligatoria."); return; }
@@ -561,7 +598,17 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
       const cc=[NOTIFY_EMAIL,rec.responsableArea?.mail].filter(e=>e&&e!==f.ejecutorMail);
       await sendEmail({to:f.ejecutorMail,cc,
         subject:`[Club] Tarea asignada — ${rec.numero}: ${rec.sector}`,
-        body:`Hola ${f.ejecutorNombre},\n\nSe te asignó la siguiente tarea:\n\nNúmero: ${rec.numero}\nSector: ${rec.sector}\nProblema: ${cat?.label} › ${rec.sub}\nDescripción: ${rec.desc}\nFecha de cierre: ${fd(f.fechaCierre)}\n\n✅ CONFIRMAR:\n${appUrl}?confirmar=${rec.id}\n\n❌ RECHAZAR:\n${appUrl}?rechazar=${rec.id}\n\nSi no respondés en 24hs el sistema notificará al responsable.`});
+  body:(()=>{
+        const startDate = (f.fechaInicioEsperado||new Date().toISOString().split("T")[0]).replace(/-/g,"");
+        const endDate = (f.fechaCierre||f.fechaInicioEsperado||new Date().toISOString().split("T")[0]).replace(/-/g,"");
+        const calTitle = encodeURIComponent(`🔧 ${rec.sector} — ${rec.numero}`);
+        const calDesc = encodeURIComponent(`Tarea: ${cat?.label} › ${rec.sub}\nDescripción: ${rec.desc}\nNúmero: ${rec.numero}\nConfirmar resolución: ${appUrl}?completar=${rec.id}`);
+        const calLink = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${calTitle}&dates=${startDate}/${endDate}&details=${calDesc}`;
+        const calReminderTitle = encodeURIComponent(`✅ Confirmar resolución — ${rec.numero}`);
+        const calReminderDesc = encodeURIComponent(`Confirmar que la tarea ${rec.numero} fue completada:\n${appUrl}?completar=${rec.id}`);
+        const calReminderLink = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${calReminderTitle}&dates=${endDate}/${endDate}&details=${calReminderDesc}`;
+        return `Hola ${f.ejecutorNombre},\n\nSe te asignó la siguiente tarea:\n\nNúmero: ${rec.numero}\nSector: ${rec.sector}\nProblema: ${cat?.label} › ${rec.sub}\nDescripción: ${rec.desc}\nFecha inicio: ${fd(f.fechaInicioEsperado||"")}\nFecha cierre: ${fd(f.fechaCierre)}\n\n✅ CONFIRMAR:\n${appUrl}?confirmar=${rec.id}\n\n❌ RECHAZAR:\n${appUrl}?rechazar=${rec.id}\n\n📅 AGREGAR AL CALENDARIO:\nEvento de tarea: ${calLink}\nRecordatorio de cierre: ${calReminderLink}\n\nSi no respondés en 24hs el sistema notificará al responsable.`;
+      })()});
     }
     const fechaCierreConfirmada = f.fechaCierre ? f.fechaCierre : rec.fechaCierreConfirmada||null;
     // Upload new adjuntosResolucion that still have base64 data
@@ -655,22 +702,49 @@ Resolución: ${descripcion||"—"}`});
             h('div',null,h('div',{style:{fontSize:10,color:"#94a3b8",fontWeight:600,marginBottom:2}},"CELULAR"),rec.celular||"—"),
             h('div',null,h('div',{style:{fontSize:10,color:"#94a3b8",fontWeight:600,marginBottom:2}},"INGRESO"),fd(rec.createdAt))),
           h('div',null,h('div',{style:{fontSize:10,color:"#94a3b8",fontWeight:600,marginBottom:3}},"DESCRIPCIÓN"),h('div',{style:{color:"#475569",lineHeight:1.5}},rec.desc)),
+          rec.ubicacion && h('div',{style:{marginTop:6,fontSize:12,color:"#64748b"}},"📍 "+rec.ubicacion),
+          rec.adjuntos?.filter(a=>a.url).length > 0 && h('div',{style:{marginTop:10}},
+            h('div',{style:{fontSize:10,color:"#94a3b8",fontWeight:600,marginBottom:6,textTransform:"uppercase",letterSpacing:0.5}},"Fotos / videos adjuntos por el solicitante"),
+            h('div',{style:{display:"flex",gap:8,flexWrap:"wrap"}},
+              ...rec.adjuntos.filter(a=>a.url).map((a,i)=>
+                a.tipo?.startsWith("video")
+                  ? h('a',{key:i,href:a.url,target:"_blank",style:{display:"inline-flex",alignItems:"center",gap:4,padding:"6px 12px",background:"#f1f5f9",borderRadius:8,fontSize:12,color:"#374151",fontWeight:600,textDecoration:"none"}},"🎥 Ver video")
+                  : h('a',{key:i,href:a.url,target:"_blank"},
+                      h('img',{src:a.url,alt:a.nombre,style:{width:80,height:80,objectFit:"cover",borderRadius:8,border:"1.5px solid #e2e8f0",cursor:"pointer"}}))))),
           rec.responsableArea?.nombre && h('div',{style:{marginTop:8,fontSize:12,color:"#64748b"}},"👔 "+rec.responsableArea.nombre),
           rec.posiblesDuplicados?.length > 0 && h('div',{style:{marginTop:8,background:"#fef9c3",border:"1.5px solid #fde047",borderRadius:8,padding:"8px 12px"}},
             h('div',{style:{fontSize:12,fontWeight:700,color:"#854d0e",marginBottom:4}},"🔍 Posibles reclamos similares detectados"),
             ...rec.posiblesDuplicados.map((d,i)=>h('div',{key:i,style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}},
-              h('span',{style:{fontSize:12,color:"#713f12"}},(d.similitud==="alta"?"⚠️ ":"💡 ")+"["+d.numero+"] "+d.razon),
+              h('div',{style:{flex:1}},
+                h('div',{style:{fontSize:12,fontWeight:700,color:"#713f12",marginBottom:2}},(d.similitud==="alta"?"⚠️ Alta similitud ":"💡 Posible similitud ")+"— "+d.numero),
+                h('div',{style:{fontSize:11,color:"#92400e",marginBottom:1}},"Existente: "+d.descExistente),
+                h('div',{style:{fontSize:11,color:"#713f12"}},"Nuevo: "+rec.desc),
+                h('div',{style:{fontSize:11,color:"#b45309",fontStyle:"italic",marginTop:2}},d.razon)),
               h('div',{style:{display:"flex",gap:6}},
                 h('button',{onClick:async()=>{
-                    if(confirm("¿Consolidar este reclamo con "+d.numero+"?")) {
-                      const updated={...rec,reclamosHijos:[...(rec.reclamosHijos||[]),d.numero],posiblesDuplicados:rec.posiblesDuplicados.filter(x=>x.numero!==d.numero)};
-                      await onSave(updated);
-                      // Notify user
-                      const cfg=getMailConfig();
-                      if(rec.email) await sendEmail({to:rec.email,subject:`[Club] Reclamos consolidados — ${rec.numero}`,body:`Hola ${rec.nombre},\n\nTu reclamo ${rec.numero} fue consolidado con el reclamo ${d.numero} que aborda el mismo problema en ${rec.sector}.\n\nSe gestionarán juntos y recibirás novedades cuando avance.\n\n— Equipo de Intendencia`});
-                    }
+                    // Find the existing reclamo to copy its data
+                    const existing = recs.find(r=>r.numero===d.numero);
+                    const updated={
+                      ...rec,
+                      // Copy key fields from existing reclamo
+                      ejecutorMail: existing?.ejecutorMail||rec.ejecutorMail,
+                      ejecutorNombre: existing?.ejecutorNombre||rec.ejecutorNombre,
+                      ejecutorConfirmado: existing?.ejecutorConfirmado||rec.ejecutorConfirmado,
+                      fechaInicioEsperado: existing?.fechaInicioEsperado||rec.fechaInicioEsperado,
+                      fechaCierre: existing?.fechaCierre||rec.fechaCierre,
+                      fechaCierreConfirmada: existing?.fechaCierreConfirmada||rec.fechaCierreConfirmada,
+                      criticidad: existing?.criticidad||rec.criticidad,
+                      estadoAvance: existing?.estadoAvance||rec.estadoAvance,
+                      reclamosHijos:[...(existing?.reclamosHijos||[]),rec.numero],
+                      posiblesDuplicados:rec.posiblesDuplicados.filter(x=>x.numero!==d.numero),
+                      comentarios:[...(rec.comentarios||[]),{texto:"Consolidado con "+d.numero+" — datos copiados automáticamente.",fecha:new Date().toISOString(),autor:"Sistema"}]
+                    };
+                    await onSave(updated);
+                    if(rec.email) await sendEmail({to:rec.email,
+                      subject:`[Club] Tu reclamo fue consolidado — ${rec.numero}`,
+                      body:`Hola ${rec.nombre},\n\nTu reclamo ${rec.numero} fue consolidado con otro reclamo previo sobre el mismo problema en ${rec.sector}.\n\nAmbos serán resueltos juntos. La fecha estimada de resolución es ${fd(existing?.fechaCierreConfirmada||existing?.fechaCierre)}.\n\n— Equipo de Intendencia`});
                   },
-                  style:{padding:"3px 10px",background:"#854d0e",color:"white",border:"none",borderRadius:6,cursor:"pointer",fontSize:11,fontWeight:600}},"Sí, consolidar"),
+                  style:{padding:"4px 12px",background:"#854d0e",color:"white",border:"none",borderRadius:6,cursor:"pointer",fontSize:11,fontWeight:600}},"✅ Sí, consolidar"),
                 h('button',{onClick:()=>{
                     const updated={...rec,posiblesDuplicados:rec.posiblesDuplicados.filter(x=>x.numero!==d.numero),duplicadosIgnorados:[...(rec.duplicadosIgnorados||[]),d.numero]};
                     onSave(updated);
@@ -703,13 +777,13 @@ Resolución: ${descripcion||"—"}`});
                   h('div',{style:{fontSize:12,color:"#92400e",fontWeight:600,marginBottom:8}},"📅 Actualizar fechas (requiere motivo)"),
                   h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}},
                     h('div',null,h('label',{style:{display:"block",fontSize:10,fontWeight:600,color:"#374151",marginBottom:4,textTransform:"uppercase"}},"Nueva fecha inicio"),h('input',{type:"date",value:f.fechaInicioActualizada,onChange:e=>set("fechaInicioActualizada",e.target.value),style:aS()})),
-                    h('div',null,h('label',{style:{display:"block",fontSize:10,fontWeight:600,color:"#374151",marginBottom:4,textTransform:"uppercase"}},"Nueva fecha cierre"),h('input',{type:"date",value:f.fechaCierreActualizada,onChange:e=>set("fechaCierreActualizada",e.target.value),style:aS()}))),
+                    h('div',null,h('label',{style:{display:"block",fontSize:10,fontWeight:600,color:"#374151",marginBottom:4,textTransform:"uppercase"}},"Nueva fecha cierre"),h('input',{type:"date",value:f.fechaCierreActualizada,onChange:e=>set("fechaCierreActualizada",e.target.value),min:f.fechaInicioActualizada||f.fechaInicioEsperado||new Date().toISOString().split("T")[0],style:aS()}))),
                   (f.fechaInicioActualizada||f.fechaCierreActualizada) && h('div',null,
                     h('label',{style:{display:"block",fontSize:10,fontWeight:600,color:"#374151",marginBottom:4,textTransform:"uppercase"}},"Motivo del cambio *"),
                     h('textarea',{value:f.motivoActualizacion,onChange:e=>set("motivoActualizacion",e.target.value),rows:2,placeholder:"Explicá el motivo del cambio de fechas...",style:{...aS(),resize:"vertical"}}))))
               : h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}},
                   h('div',null,h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Inicio esperado *"),h('input',{type:"date",value:f.fechaInicioEsperado,onChange:e=>set("fechaInicioEsperado",e.target.value),min:new Date().toISOString().split("T")[0],style:aS()})),
-                  h('div',null,h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Cierre esperado *"),h('input',{type:"date",value:f.fechaCierre,onChange:e=>set("fechaCierre",e.target.value),min:new Date().toISOString().split("T")[0],style:aS()}))),
+                  h('div',null,h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Cierre esperado *"),h('input',{type:"date",value:f.fechaCierre,onChange:e=>set("fechaCierre",e.target.value),min:f.fechaInicioEsperado||new Date().toISOString().split("T")[0],style:aS()}))),
           f.fechaInicioEsperado && f.fechaCierre && (new Date(f.fechaCierre)-new Date(f.fechaInicioEsperado))/86400000 > 30 && h('div',{style:{background:"#fff7ed",border:"1.5px solid #fed7aa",borderRadius:8,padding:"8px 12px",marginBottom:8,fontSize:12,color:"#92400e"}},"⚠️ Esta tarea tiene más de 30 días de duración. Asegurate de que sea necesario."),
           h('div',{style:{marginBottom:14}},h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Presupuesto ($)"),h('input',{value:f.presupuesto,onChange:e=>set("presupuesto",e.target.value),placeholder:"0",type:"number",style:aS()})),
           h('div',{style:{marginBottom:14}},h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Detalle del presupuesto"),h('textarea',{value:f.presupuestoDetalle,onChange:e=>set("presupuestoDetalle",e.target.value),rows:2,placeholder:"Conceptos...",style:{...aS(),resize:"vertical"}})),
@@ -719,13 +793,26 @@ Resolución: ${descripcion||"—"}`});
         tab==="asignacion" && h('div',null,
           rec.ejecutorRechazado && h('div',{style:{background:"#fef2f2",border:"1.5px solid #fecaca",borderRadius:10,padding:12,fontSize:13,color:"#dc2626",fontWeight:600,marginBottom:16}},
             "❌ Tarea rechazada",h('br'),h('span',{style:{fontWeight:400,fontSize:12}},"Motivo: "+rec.motivoRechazo),h('br'),h('span',{style:{fontWeight:400,fontSize:12}},"Seleccioná un nuevo ejecutor para reasignar.")),
-          h('div',{style:{background:"#eff6ff",border:"1.5px solid #bfdbfe",borderRadius:10,padding:12,marginBottom:16,fontSize:13,color:"#1d4ed8",lineHeight:1.5}},"📧 Al asignar un ejecutor nuevo se enviará email con links de confirmar/rechazar."),
-          h('div',{style:{marginBottom:16}},
-            h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:0.5}},"Seleccionar ejecutor"),
-            h('select',{value:f.ejecutorMail,onChange:e=>selectEj(e.target.value),style:aS()},
-              h('option',{value:""},"— Seleccioná un ejecutor —"),
-              ...ejecutores.map(e=>h('option',{key:e.mail,value:e.mail},e.nombre+" ("+e.mail+")")))),
-          f.ejecutorMail && h('div',{style:{background:"#f8fafc",borderRadius:10,padding:12,fontSize:13,marginBottom:14}},
+          h('div',{style:{background:"#eff6ff",border:"1.5px solid #bfdbfe",borderRadius:10,padding:12,marginBottom:16,fontSize:13,color:"#1d4ed8",lineHeight:1.5}},"📧 Al asignar un ejecutor interno se enviará email con links de confirmar/rechazar."),
+          // Toggle interno vs tercero
+          h('div',{style:{display:"flex",gap:8,marginBottom:14}},
+            ...[["interno","👷 Empleado del club"],["tercero","🏢 Proveedor externo"]].map(([tipo,lbl])=>
+              h('button',{key:tipo,onClick:()=>{set("tipoEjecutor",tipo);if(tipo==="tercero"){set("ejecutorMail","tercero@externo");set("ejecutorNombre",f.empresaNombre||"");}else{set("ejecutorMail","");set("ejecutorNombre","");}},
+                style:{flex:1,padding:"8px",borderRadius:8,border:f.tipoEjecutor===tipo?"2px solid #3b82f6":"2px solid #e2e8f0",background:f.tipoEjecutor===tipo?"#eff6ff":"white",color:f.tipoEjecutor===tipo?"#1d4ed8":"#64748b",cursor:"pointer",fontSize:13,fontWeight:600}},lbl))),
+          f.tipoEjecutor==="tercero"
+            ? h('div',{style:{background:"#f8fafc",borderRadius:10,padding:12,marginBottom:14}},
+                h('div',{style:{marginBottom:10}},
+                  h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Empresa / Proveedor *"),
+                  h('input',{value:f.empresaNombre||"",onChange:e=>{set("empresaNombre",e.target.value);set("ejecutorNombre",e.target.value);},placeholder:"Nombre de la empresa",style:aS()})),
+                h('div',null,
+                  h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Teléfono / contacto"),
+                  h('input',{value:f.empresaTelefono||"",onChange:e=>set("empresaTelefono",e.target.value),placeholder:"Ej: 11-1234-5678",style:aS()})))
+            : h('div',{style:{marginBottom:16}},
+                h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:0.5}},"Seleccionar ejecutor"),
+                h('select',{value:f.ejecutorMail,onChange:e=>selectEj(e.target.value),style:aS()},
+                  h('option',{value:""},"— Seleccioná un ejecutor —"),
+                  ...ejecutores.map(e=>h('option',{key:e.mail,value:e.mail},e.nombre+" ("+e.mail+")")))),
+          f.ejecutorMail && f.tipoEjecutor!=="tercero" && h('div',{style:{background:"#f8fafc",borderRadius:10,padding:12,fontSize:13,marginBottom:14}},
             h('div',{style:{fontWeight:600,color:"#1e293b"}},f.ejecutorNombre),
             h('div',{style:{color:"#64748b"}},f.ejecutorMail)),
           !rec.ejecutorRechazado && rec.ejecutorConfirmado && h('div',{style:{background:"#f0fdf4",border:"1.5px solid #bbf7d0",borderRadius:10,padding:12,fontSize:13,color:"#15803d",fontWeight:600,marginBottom:12}},"✅ Confirmó el "+fdt(rec.fechaConfirmacion)),
@@ -804,11 +891,31 @@ Resolución: ${descripcion||"—"}`});
 }
 
 // ── PANEL CONFIG ───────────────────────────────────────────────────────────
+function PersonList({list, onRemove, onAdd}) {
+  const [nombre,setNombre] = useState("");
+  const [mail,setMail] = useState("");
+  const iS = () => ({width:"100%",padding:"9px 12px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:13,outline:"none",boxSizing:"border-box"});
+  const add = () => {
+    if(!nombre.trim()||!mail.trim()) return;
+    onAdd({nombre:nombre.trim(),mail:mail.trim()});
+    setNombre(""); setMail("");
+  };
+  return h('div',null,
+    ...list.map((e,i)=>h('div',{key:i,style:{display:"flex",alignItems:"center",gap:8,marginBottom:6,background:"#f8fafc",borderRadius:8,padding:"8px 12px"}},
+      h('div',{style:{flex:1}},
+        h('div',{style:{fontSize:13,fontWeight:600,color:"#1e293b"}},e.nombre),
+        h('div',{style:{fontSize:12,color:"#64748b"}},e.mail)),
+      h('button',{onClick:()=>onRemove(i),style:{background:"none",border:"none",cursor:"pointer",color:"#ef4444",fontSize:16}},"✕"))),
+    h('div',{style:{display:"flex",flexDirection:"column",gap:6,marginTop:8}},
+      h('input',{value:nombre,onChange:e=>setNombre(e.target.value),placeholder:"Nombre completo",style:iS()}),
+      h('input',{value:mail,onChange:e=>setMail(e.target.value),placeholder:"Email",type:"email",style:iS(),onKeyDown:e=>e.key==="Enter"&&add()}),
+      h('button',{onClick:add,style:{padding:"9px 14px",background:"#0f172a",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:600,width:"100%"}},"+ Agregar")));
+}
+
 function PanelConfig({onClose, onSaveEjecutores}) {
   const defaultCfg = {scriptUrl:"",mailIntendencia:"",mailAdmin:"",directivosIntendencia:[],directivosAdmin:[]};
   const [ejs,setEjs] = useState([]);
   const [cfg,setCfg] = useState(defaultCfg);
-  const [nuevos,setNuevos] = useState({ej:{nombre:"",mail:""},di:{nombre:"",mail:""},da:{nombre:"",mail:""}});
   const [saved,setSaved] = useState(false);
   const [tab,setTab] = useState("roles");
 
@@ -825,21 +932,7 @@ function PanelConfig({onClose, onSaveEjecutores}) {
 
   const iS = () => ({width:"100%",padding:"9px 12px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:13,outline:"none",boxSizing:"border-box"});
 
-  const PersonList = ({list, onRemove, onAdd, nuevoKey, placeholder}) => {
-    const n = nuevos[nuevoKey];
-    const addItem = () => { if(!n.nombre.trim()||!n.mail.trim()) return; onAdd(n); setNuevos(p=>({...p,[nuevoKey]:{nombre:"",mail:""}})); };
-    return h('div',null,
-      ...list.map((e,i)=>h('div',{key:i,style:{display:"flex",alignItems:"center",gap:8,marginBottom:6,background:"#f8fafc",borderRadius:8,padding:"8px 12px"}},
-        h('div',{style:{flex:1}},
-          h('div',{style:{fontSize:13,fontWeight:600,color:"#1e293b"}},e.nombre),
-          h('div',{style:{fontSize:12,color:"#64748b"}},e.mail)),
-        h('button',{onClick:()=>onRemove(i),style:{background:"none",border:"none",cursor:"pointer",color:"#ef4444",fontSize:16}},"✕"))),
-      h('div',{style:{display:"flex",flexDirection:"column",gap:6,marginTop:8}},
-        h('input',{value:n.nombre,onChange:e=>setNuevos(p=>({...p,[nuevoKey]:{...p[nuevoKey],nombre:e.target.value}})),placeholder:"Nombre completo",style:{...iS(),fontSize:13}}),
-        h('input',{value:n.mail,onChange:e=>setNuevos(p=>({...p,[nuevoKey]:{...p[nuevoKey],mail:e.target.value}})),placeholder:"Email",type:"email",style:{...iS(),fontSize:13}}),
-        h('button',{onClick:addItem,style:{padding:"9px 14px",background:"#0f172a",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:600,width:"100%"}},"+ Agregar"))
-    );
-  };
+  // PersonList is defined outside to prevent re-render focus loss
 
   const tabStyle = t => ({padding:"8px 14px",border:"none",background:tab===t?"#0f172a":"transparent",color:tab===t?"white":"#64748b",cursor:"pointer",fontSize:13,fontWeight:tab===t?700:500,borderRadius:8});
 
@@ -859,7 +952,7 @@ function PanelConfig({onClose, onSaveEjecutores}) {
           h('div',{style:{marginBottom:20}},
             h('div',{style:{fontSize:13,fontWeight:700,color:"#0f172a",marginBottom:4}},"👷 Ejecutores / Empleados"),
             h('div',{style:{fontSize:12,color:"#64748b",marginBottom:10}},"Son las personas que ejecutan las tareas asignadas."),
-            h(PersonList,{list:ejs,onRemove:i=>setEjs(e=>e.filter((_,idx)=>idx!==i)),onAdd:n=>setEjs(e=>[...e,n]),nuevoKey:"ej"})),
+            h(PersonList,{list:ejs,onRemove:i=>setEjs(e=>e.filter((_,idx)=>idx!==i)),onAdd:n=>setEjs(e=>[...e,n])})),
           h('div',{style:{height:1,background:"#f1f5f9",marginBottom:20}}),
           // Responsables
           h('div',{style:{marginBottom:20}},
@@ -875,11 +968,11 @@ function PanelConfig({onClose, onSaveEjecutores}) {
           h('div',{style:{marginBottom:20}},
             h('div',{style:{fontSize:13,fontWeight:700,color:"#0f172a",marginBottom:4}},"🎖️ Directivos — Intendencia"),
             h('div',{style:{fontSize:12,color:"#64748b",marginBottom:10}},"Reciben escalados de temas de intendencia."),
-            h(PersonList,{list:cfg.directivosIntendencia||[],onRemove:i=>setCfg(c=>({...c,directivosIntendencia:c.directivosIntendencia.filter((_,idx)=>idx!==i)})),onAdd:n=>setCfg(c=>({...c,directivosIntendencia:[...(c.directivosIntendencia||[]),n]})),nuevoKey:"di"})),
+            h(PersonList,{list:cfg.directivosIntendencia||[],onRemove:i=>setCfg(c=>({...c,directivosIntendencia:c.directivosIntendencia.filter((_,idx)=>idx!==i)})),onAdd:n=>setCfg(c=>({...c,directivosIntendencia:[...(c.directivosIntendencia||[]),n]}))})),
           h('div',{style:{marginBottom:4}},
             h('div',{style:{fontSize:13,fontWeight:700,color:"#0f172a",marginBottom:4}},"🎖️ Directivos — Administración"),
             h('div',{style:{fontSize:12,color:"#64748b",marginBottom:10}},"Reciben escalados de temas de administración."),
-            h(PersonList,{list:cfg.directivosAdmin||[],onRemove:i=>setCfg(c=>({...c,directivosAdmin:c.directivosAdmin.filter((_,idx)=>idx!==i)})),onAdd:n=>setCfg(c=>({...c,directivosAdmin:[...(c.directivosAdmin||[]),n]})),nuevoKey:"da"}))),
+            h(PersonList,{list:cfg.directivosAdmin||[],onRemove:i=>setCfg(c=>({...c,directivosAdmin:c.directivosAdmin.filter((_,idx)=>idx!==i)})),onAdd:n=>setCfg(c=>({...c,directivosAdmin:[...(c.directivosAdmin||[]),n]}))}))),
 
         // TAB ESCALADO
         tab==="escalado" && h('div',null,
@@ -968,15 +1061,15 @@ function ModalProyecto({proyecto, onClose, onSave, ejecutores, recs}) {
 
   const save=async()=>{
     await onSave(f);
-    // Notify linked reclamo users of project updates if existing project
-    if(!nuevo && f.reclamosVinculados?.length>0){
+    // Only notify users when project is COMPLETED (not on every update)
+    if(!nuevo && f.estado==="completado" && proyecto?.estado!=="completado" && f.reclamosVinculados?.length>0){
       const appUrl=window.location.href.split("?")[0];
       for(const num of f.reclamosVinculados){
         const rec=recs.find(r=>r.numero===num);
         if(rec?.email){
           await sendEmail({to:rec.email,
-            subject:`[Club] 📋 Actualización del proyecto — ${f.titulo}`,
-            body:`Hola ${rec.nombre},\n\nTu reclamo ${rec.numero} está vinculado al proyecto "${f.titulo}" que tiene novedades.\n\n${f.avances?.slice(-1)[0]?"Último avance: "+f.avances.slice(-1)[0].texto+"\n\n":""}${f.proximosPasos?"Próximos pasos: "+f.proximosPasos+"\n\n":""}Fecha estimada de finalización: ${fd(f.fechaFin)||"Por definir"}\n\nPodés seguir el estado de tu reclamo:\n${appUrl}?seguimiento=${rec.numero}\n\n— Equipo de Intendencia`});
+            subject:`[Club] ✅ Proyecto completado — tu reclamo fue resuelto`,
+            body:`Hola ${rec.nombre},\n\nEl proyecto "${f.titulo}" al que estaba vinculado tu reclamo ${rec.numero} (${rec.sector}) fue completado.\n\nTu problema ha sido resuelto. Te invitamos a calificar la resolución:\n${appUrl}?calificar=${rec.id}\n\n— Equipo de Intendencia`});
         }
       }
     }
@@ -1101,11 +1194,25 @@ function ProyectosTab({recs, onUpdate, ejecutores}) {
     const lista=proyectos.find(x=>x.id===p.id)?proyectos.map(x=>x.id===p.id?p:x):[p,...proyectos];
     setProyectos(lista);
     ls.set("proyectos",lista);
-    // Update linked reclamos state
+    // Update linked reclamos with project data
     for(const num of (p.reclamosVinculados||[])){
       const rec=recs.find(r=>r.numero===num);
-      if(rec && rec.estadoAvance!=="vinculado_proyecto"){
-        await onUpdate({...rec,estadoAvance:"vinculado_proyecto",proyectoVinculado:p.id,proyectoTitulo:p.titulo},rec);
+      if(rec){
+        await onUpdate({
+          ...rec,
+          estadoAvance:"vinculado_proyecto",
+          proyectoVinculado:p.id,
+          proyectoTitulo:p.titulo,
+          // Copy dates and description from project
+          fechaInicioEsperado: p.fechaInicio||rec.fechaInicioEsperado,
+          fechaCierre: p.fechaFin||rec.fechaCierre,
+          fechaCierreConfirmada: p.fechaFin||rec.fechaCierreConfirmada,
+          descripcionProyecto: p.descripcion,
+          comentarios:[...(rec.comentarios||[]),{
+            texto:`Vinculado al proyecto "${p.titulo}". Fechas actualizadas automáticamente según el proyecto.`,
+            fecha:new Date().toISOString(),autor:"Sistema"
+          }]
+        },rec);
       }
     }
   };
@@ -1174,6 +1281,13 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
     if(filtros.sector&&r.sector!==filtros.sector) return false;
     if(filtros.q){const q=filtros.q.toLowerCase();if(!r.numero.toLowerCase().includes(q)&&!r.desc?.toLowerCase().includes(q)&&!r.sector.toLowerCase().includes(q))return false;}
     return true;
+  }).sort((a,b)=>{
+    const s=filtros.sort||"sector";
+    if(s==="sector") return (a.sector||"").localeCompare(b.sector||"")||new Date(a.createdAt)-new Date(b.createdAt);
+    if(s==="numero") return (a.numero||"").localeCompare(b.numero||"");
+    if(s==="fecha") return new Date(b.createdAt)-new Date(a.createdAt);
+    if(s==="criticidad"){const ord=["mega_urgente","urgente","alta","media","baja"];return ord.indexOf(a.criticidad||a.pri)-ord.indexOf(b.criticidad||b.pri);}
+    return 0;
   });
 
   const stats={
@@ -1223,6 +1337,7 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
         h('h1',{style:{fontFamily:"'Playfair Display',serif",color:"white",fontSize:22,margin:0}},"Intendencia del Club")),
       h('div',{style:{display:"flex",gap:8}},
         h('button',{onClick:()=>setShowCfg(true),style:{padding:"8px 14px",background:"rgba(255,255,255,0.1)",color:"white",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600}},"⚙️ Configuración"),
+        h('button',{onClick:async()=>{if(confirm("⚠️ ¿Borrar TODOS los reclamos? Esta acción no se puede deshacer.")){const ok=await sbClearAll();if(ok){setRecs([]);alert("✅ Todos los reclamos fueron eliminados.");}else{alert("❌ Error al eliminar.");}}},style:{padding:"8px 14px",background:"rgba(239,68,68,0.3)",color:"#fca5a5",border:"1px solid rgba(239,68,68,0.4)",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600}},"🗑️ Limpiar BD"),
         h('button',{onClick:()=>{const d=prompt("Simular cuántos días transcurridos (ej: 4):");if(d&&!isNaN(d))testAlerts(Number(d));},style:{padding:"8px 14px",background:"rgba(255,255,255,0.1)",color:"white",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600}},"🧪 Test"),
         h('button',{onClick:checkAlerts,disabled:checking,style:{padding:"8px 14px",background:checking?"#475569":"#f97316",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600}},checking?"Verificando...":"⚠️ Revisar alertas"))),
     // Main tabs: Reclamos | Proyectos
@@ -1248,6 +1363,11 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
         h('option',{value:""},"Todos los sectores"),
         ...SECTORES_TODOS.map(s=>h('option',{key:s,value:s},s))),
       h('span',{style:{fontSize:13,color:"#94a3b8"}},filtrados.length+" reclamos"),
+      h('select',{value:filtros.sort||"sector",onChange:e=>sf("sort",e.target.value),style:{padding:"7px 12px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:12,outline:"none"}},
+        h('option',{value:"sector"},"Ordenar: Sector"),
+        h('option',{value:"numero"},"Ordenar: Número"),
+        h('option',{value:"fecha"},"Ordenar: Más recientes"),
+        h('option',{value:"criticidad"},"Ordenar: Criticidad")),
       h('div',{style:{marginLeft:"auto",display:"flex",gap:6}},
         ...[["lista","☰ Lista"],["kanban","⬜ Kanban"]].map(([id,lbl])=>
           h('button',{key:id,onClick:()=>setView(id),style:{padding:"7px 14px",borderRadius:8,border:"1.5px solid #e2e8f0",background:view===id?"#0f172a":"white",color:view===id?"white":"#64748b",cursor:"pointer",fontSize:12,fontWeight:600}},lbl)))),
@@ -1302,35 +1422,86 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
 }
 
 // ── LOGIN ──────────────────────────────────────────────────────────────────
-function Login({onLogin, onSeguimiento}) {
+function Login({onLogin}) {
   const [p,setP] = useState(""); const [err,setErr] = useState(false);
-  const [num,setNum] = useState(""); const [errNum,setErrNum] = useState(false);
-  const [tab,setTab] = useState("admin"); // "admin" or "seguimiento"
   const go = () => { if(p===ADMIN_PASSWORD){onLogin();}else{setErr(true);setTimeout(()=>setErr(false),2000);} };
-  const goSeg = () => { if(num.trim()){onSeguimiento(num.trim().toUpperCase());}else{setErrNum(true);setTimeout(()=>setErrNum(false),2000);} };
-  const tabStyle = (t) => ({padding:"10px 20px",border:"none",background:tab===t?"#0f172a":"transparent",color:tab===t?"white":"#64748b",cursor:"pointer",fontSize:14,fontWeight:tab===t?700:500,borderRadius:8,transition:"all 0.2s"});
   return h('div',{style:{minHeight:"100vh",background:"#0f172a",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
-    h('div',{style:{background:"white",borderRadius:20,padding:36,maxWidth:400,width:"100%",textAlign:"center"}},
-      h('div',{style:{fontSize:36,marginBottom:12}},"🏛️"),
-      h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:22,margin:"0 0 20px"}},"Club — Reclamos"),
-      // Tabs
-      h('div',{style:{display:"flex",gap:6,background:"#f1f5f9",borderRadius:10,padding:4,marginBottom:24}},
-        h('button',{onClick:()=>setTab("seguimiento"),style:tabStyle("seguimiento")},"🔍 Mi reclamo"),
-        h('button',{onClick:()=>setTab("admin"),style:tabStyle("admin")},"🔒 Intendencia")),
-      // Tab seguimiento
-      tab==="seguimiento" && h('div',null,
-        h('p',{style:{color:"#64748b",fontSize:14,marginBottom:16}},"Ingresá tu número de reclamo para ver el estado"),
-        h('input',{value:num,onChange:e=>setNum(e.target.value),onKeyDown:e=>e.key==="Enter"&&goSeg(),placeholder:"Ej: R-123456",
-          style:{width:"100%",padding:"12px 14px",borderRadius:10,border:errNum?"2px solid #ef4444":"2px solid #e2e8f0",fontSize:16,outline:"none",marginBottom:12,boxSizing:"border-box",textAlign:"center",letterSpacing:2,fontWeight:700}}),
-        errNum && h('div',{style:{color:"#ef4444",fontSize:13,marginBottom:8}},"Ingresá un número de reclamo"),
-        h('button',{onClick:goSeg,style:{width:"100%",padding:"13px",background:"linear-gradient(135deg,#3b82f6,#1d4ed8)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:15,fontWeight:700}},"Ver mi reclamo →")),
-      // Tab admin
-      tab==="admin" && h('div',null,
-        h('p',{style:{color:"#64748b",fontSize:14,marginBottom:16}},"Ingresá la contraseña de intendencia"),
-        h('input',{type:"password",value:p,onChange:e=>setP(e.target.value),onKeyDown:e=>e.key==="Enter"&&go(),placeholder:"Contraseña",
-          style:{width:"100%",padding:"12px 14px",borderRadius:10,border:err?"2px solid #ef4444":"2px solid #e2e8f0",fontSize:15,outline:"none",marginBottom:12,boxSizing:"border-box"}}),
-        err && h('div',{style:{color:"#ef4444",fontSize:13,marginBottom:8}},"Contraseña incorrecta"),
-        h('button',{onClick:go,style:{width:"100%",padding:"13px",background:"#0f172a",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:15,fontWeight:700}},"Ingresar →"))));
+    h('div',{style:{background:"white",borderRadius:20,padding:36,maxWidth:380,width:"100%",textAlign:"center"}},
+      h('div',{style:{fontSize:40,marginBottom:12}},"🏛️"),
+      h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:22,margin:"0 0 6px"}},"Panel de Gestión"),
+      h('p',{style:{color:"#64748b",fontSize:14,marginBottom:24}},"Ingresá la contraseña para acceder"),
+      h('input',{type:"password",value:p,onChange:e=>setP(e.target.value),onKeyDown:e=>e.key==="Enter"&&go(),placeholder:"Contraseña",
+        style:{width:"100%",padding:"12px 14px",borderRadius:10,border:err?"2px solid #ef4444":"2px solid #e2e8f0",fontSize:15,outline:"none",marginBottom:12,boxSizing:"border-box"}}),
+      err && h('div',{style:{color:"#ef4444",fontSize:13,marginBottom:8}},"Contraseña incorrecta"),
+      h('button',{onClick:go,style:{width:"100%",padding:"13px",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:15,fontWeight:700}},"Ingresar →")));
+}
+
+// ── COMPLETAR VIEW (for executor) ────────────────────────────────────────────
+function CompletarView({recId, recs, setRecs, loaded}) {
+  const rec = recs.find(r=>r.id===Number(recId));
+  const [desc,setDesc] = useState("");
+  const [err,setErr] = useState(false);
+  const [done,setDone] = useState(false);
+  const [sending,setSending] = useState(false);
+  const fileRef = useRef();
+  const [fotos,setFotos] = useState([]);
+
+  if(!loaded) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:18}},"Cargando...");
+  if(!rec) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
+    h('div',{style:{background:"white",borderRadius:20,padding:40,maxWidth:420,width:"100%",textAlign:"center"}},
+      h('div',{style:{fontSize:48,marginBottom:16}},"🔍"),h('p',{style:{color:"#64748b"}},"Reclamo no encontrado.")));
+
+  if(done) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
+    h('div',{style:{background:"white",borderRadius:20,padding:40,maxWidth:420,width:"100%",textAlign:"center"}},
+      h('div',{style:{fontSize:64,marginBottom:16}},"✅"),
+      h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:24,color:"#0f172a",margin:"0 0 12px"}},"¡Resolución registrada!"),
+      h('p',{style:{color:"#64748b",fontSize:15,lineHeight:1.6}},"El responsable fue notificado. El usuario recibirá un email para calificar la resolución."),
+      h('p',{style:{color:"#94a3b8",fontSize:13,marginTop:16}},"Podés cerrar esta ventana.")));
+
+  const submit = async () => {
+    if(!desc.trim()){setErr(true);return;}
+    setSending(true);
+    let adjuntosResolucion=[];
+    if(fotos.length>0) adjuntosResolucion=await uploadAdjuntos(fotos,rec.id,"resolucion");
+    const appUrl=window.location.href.split("?")[0];
+    const calificarUrl=appUrl+"?calificar="+rec.id;
+    const mailCfg=getMailConfig();
+    const msgCat={infraestructura:"nuestro equipo de obras e infraestructura revisó y resolvió el inconveniente",mantenimiento:"nuestro equipo de mantenimiento atendió y solucionó el problema",limpieza:"nuestro equipo de limpieza atendió la situación",equipamiento:"el equipamiento fue revisado y el problema fue solucionado",preparacion:"el espacio fue preparado correctamente",servicios:"nuestro equipo de atención al socio gestionó tu consulta",cuotas:"nuestro equipo administrativo revisó y resolvió tu consulta"}[rec.cat]||"nuestro equipo atendió y resolvió el inconveniente";
+    const updated={...rec,estadoAvance:"completada",descripcionResolucion:desc,adjuntosResolucion,updatedAt:new Date().toISOString(),
+      comentarios:[...(rec.comentarios||[]),{texto:`Ejecutor marcó como completada. Resolución: ${desc}`,fecha:new Date().toISOString(),autor:rec.ejecutorNombre||"Ejecutor"}]};
+    await sbUpsert(updated);
+    setRecs(prev=>prev.map(r=>r.id===rec.id?updated:r));
+    if(rec.email) await sendEmail({to:rec.email,subject:`[Club] ✅ Tu reclamo fue resuelto — ${rec.numero}`,
+      body:`Hola ${rec.nombre},\n\nNos alegra informarte que el problema que reportaste en ${rec.sector} fue resuelto. ${msgCat}.\n\nLo que se hizo:\n${desc}\n\nCuando tengas un momento, evaluá si el problema quedó resuelto y calificá la atención. En caso de no estar conforme podés reabrir el ticket:\n${calificarUrl}\n\nGracias por ayudarnos a mejorar el club.\n\n— Equipo de Intendencia`});
+    const dirMails=getDirectivos(rec.cat).map(d=>d.mail);
+    const respMail=getResponsableMail(rec.cat);
+    await sendEmail({to:[respMail,...dirMails].filter(Boolean),subject:`[Club] ✅ Tarea completada por ejecutor — ${rec.numero}`,body:`${rec.ejecutorNombre||"El ejecutor"} marcó como completada la tarea ${rec.numero} (${rec.sector}).\n\nResolución: ${desc}`});
+    setSending(false);setDone(true);
+  };
+
+  return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",padding:"20px 16px 40px"}},
+    h('div',{style:{textAlign:"center",marginBottom:24,paddingTop:20}},
+      h('div',{style:{fontSize:11,letterSpacing:3,color:"#93c5fd",textTransform:"uppercase",marginBottom:8}},"Confirmación de Resolución"),
+      h('h1',{style:{fontFamily:"'Playfair Display',serif",fontSize:26,color:"white",fontWeight:900}},rec.numero),
+      h('div',{style:{width:40,height:3,background:"#22c55e",margin:"10px auto 0",borderRadius:2}})),
+    h('div',{style:{maxWidth:480,margin:"0 auto"}},
+      h('div',{style:{background:"white",borderRadius:16,padding:"24px 20px"}},
+        h('div',{style:{background:"#f8fafc",borderRadius:10,padding:12,marginBottom:16,fontSize:13}},
+          h('div',{style:{fontWeight:600,color:"#1e293b",marginBottom:4}},rec.sector+" — "+rec.sub),
+          h('div',{style:{color:"#64748b",lineHeight:1.5}},rec.desc)),
+        h('div',{style:{marginBottom:14}},
+          h('label',{style:{display:"block",fontSize:12,fontWeight:600,color:err?"#dc2626":"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:0.5}},err?"¿Qué se hizo? (obligatorio)":"¿Qué se hizo?"),
+          h('textarea',{value:desc,onChange:e=>{setDesc(e.target.value);setErr(false);},rows:5,placeholder:"Describí brevemente qué hiciste para resolver el problema...",style:{width:"100%",padding:"11px 14px",borderRadius:8,border:err?"2px solid #ef4444":"1.5px solid #e2e8f0",fontSize:14,resize:"vertical",outline:"none",boxSizing:"border-box"}})),
+        h('div',{style:{marginBottom:20}},
+          h('label',{style:{display:"block",fontSize:12,fontWeight:600,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:0.5}},"Foto / video (opcional)"),
+          h('input',{ref:fileRef,type:"file",accept:"image/*,video/*",multiple:true,style:{display:"none"},onChange:e=>{Array.from(e.target.files).forEach(file=>{const r=new FileReader();r.onload=ev=>setFotos(p=>[...p,{nombre:file.name,tipo:file.type,data:ev.target.result}]);r.readAsDataURL(file);});e.target.value="";}}),
+          h('div',{style:{display:"flex",gap:8,flexWrap:"wrap",marginBottom:fotos.length?8:0}},
+            ...fotos.map((f,i)=>h('div',{key:i,style:{display:"flex",alignItems:"center",gap:6,background:"#f1f5f9",borderRadius:8,padding:"5px 10px",fontSize:12}},
+              h('span',null,f.tipo?.startsWith("video")?"🎥":"📷"),
+              h('span',{style:{maxWidth:100,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},f.nombre),
+              h('button',{onClick:()=>setFotos(p=>p.filter((_,idx)=>idx!==i)),style:{background:"none",border:"none",cursor:"pointer",color:"#ef4444",fontSize:14,padding:0}},"✕")))),
+          h('button',{onClick:()=>fileRef.current.click(),style:{padding:"8px 16px",borderRadius:8,border:"1.5px dashed #e2e8f0",background:"transparent",color:"#64748b",cursor:"pointer",fontSize:13}},"📎 Adjuntar foto / video")),
+        h('button',{onClick:submit,disabled:sending,style:{width:"100%",padding:"14px",background:sending?"#94a3b8":"linear-gradient(135deg,#22c55e,#15803d)",color:"white",border:"none",borderRadius:12,fontSize:15,fontWeight:700,cursor:"pointer"}},sending?"Enviando...":"✅ Confirmar resolución"))));
 }
 
 // ── CALIFICAR VIEW ────────────────────────────────────────────────────────
@@ -1423,7 +1594,7 @@ function CalificarView({recId, recs, setRecs, loaded}) {
                     h('img',{src:a.url,alt:"Evidencia",style:{width:90,height:90,objectFit:"cover",borderRadius:8,border:"1.5px solid #e2e8f0"}}))))),
         // Calificación
         h('div',{style:{textAlign:"center",marginBottom:stars>0&&stars<=3?0:16}},
-          h('div',{style:{fontSize:14,fontWeight:600,color:"#374151",marginBottom:4}},"¿Cómo calificás la resolución?"),
+          h('div',{style:{fontSize:14,fontWeight:600,color:"#374151",marginBottom:4}},"Cuando tengas un momento, evaluá si el problema quedó resuelto y calificá la atención."),
           h('div',{style:{fontSize:12,color:"#94a3b8",marginBottom:12}},"Tu opinión nos ayuda a mejorar el servicio"),
           h('div',{style:{display:"flex",justifyContent:"center",gap:6}},
             ...[1,2,3,4,5].map(s=>h('button',{key:s,onClick:()=>setStars(s),
@@ -1446,7 +1617,9 @@ function App() {
   const _params = new URLSearchParams(window.location.search);
   const _segParam  = _params.get("seguimiento");
   const _calParam  = _params.get("calificar");
+  const _compParam = _params.get("completar");
   const _initView  = _segParam  ? "seguimiento_"+_segParam
+    : _compParam  ? "completar_"+_compParam
     : _calParam   ? "calificar_"+_calParam
     : _params.get("confirmar") ? "loading"
     : _params.get("rechazar")  ? "loading"
@@ -1467,6 +1640,7 @@ function App() {
       const reabrirId    = params.get("reabrir");
       const seguimientoN = params.get("seguimiento");
       const calificarId  = params.get("calificar");
+      const completarId  = params.get("completar");
 
       const lista = await sbGetAll();
 
@@ -1486,6 +1660,8 @@ function App() {
         const r=lista.find(r=>String(r.id)===rechazarId);
         ls.set("pendingRechazar",{id:rechazarId,rec:r});
         setView("rechazar");
+      } else if(completarId){
+        setView("completar_"+completarId);
       } else if(calificarId){
         setView("calificar_"+calificarId);
       } else if(seguimientoN){
@@ -1493,10 +1669,15 @@ function App() {
       } else if(reabrirId){
         const r=lista.find(r=>String(r.id)===reabrirId);
         if(r){
-          const updated={...r,estadoAvance:"no_iniciada",
-            comentarios:[...(r.comentarios||[]),{texto:"Tarea reabierta.",fecha:new Date().toISOString(),autor:"Sistema"}]};
+          const updated={...r,estadoAvance:"bajo_analisis",
+            reabiertaEn:new Date().toISOString(),
+            createdAt:new Date().toISOString(), // reset escalado timer
+            comentarios:[...(r.comentarios||[]),{texto:"Reclamo reabierto por el usuario — requiere revisión.",fecha:new Date().toISOString(),autor:"Sistema"}]};
           await sbUpsert(updated);
-          alert("🔄 Tarea reabierta.");
+          // Notify responsable
+          const respMail = isAdminCat(r.cat)?(ls.get("config")||{}).mailAdmin:(ls.get("config")||{}).mailIntendencia;
+          if(respMail) await sendEmail({to:respMail,subject:`[Club] 🔄 Reclamo reabierto — ${r.numero}`,body:`El usuario reabrió el reclamo ${r.numero} (${r.sector}) porque no quedó conforme con la resolución.\n\nRequiere revisión inmediata.`});
+          setView("reabrir_ok");
         }
       }
 
@@ -1565,13 +1746,7 @@ Te avisaremos cuando esté resuelto.
 
 — Equipo de Intendencia`});
     }
-    // Notificar al usuario cuando se completa
-    if(rec.email && rec.estadoAvance==="completada" && prevRec && prevRec.estadoAvance!=="completada"){
-      await sendEmail({to:rec.email,
-        subject:`[Club] ✅ Tu reclamo fue resuelto — ${rec.numero}`,
-        body:`Hola ${rec.nombre},\n\nTu reclamo fue resuelto.\n\nNúmero: ${rec.numero}\nSector: ${rec.sector}\n${rec.descripcionResolucion?"Resolución: "+rec.descripcionResolucion+"\n":""}${rec.evidenciaUrl?"Evidencia: "+rec.evidenciaUrl+"\n":""}\nPor favor calificá la resolución (1-5 estrellas) haciendo clic acá:\n${appUrl}?calificar=${rec.id}\n\nSi no quedás conforme podés solicitar la reapertura desde ese link.\n\n— Equipo de Intendencia`});
-
-    }
+    // Resolution email is handled by notifResolucionAuto in EditModal save
   };
 
   const handleRechazar = async motivo => {
@@ -1607,6 +1782,7 @@ Te avisaremos cuando esté resuelto.
       h('p',{style:{color:"#64748b",fontSize:15,lineHeight:1.6}},"Tu respuesta fue registrada. El responsable fue notificado y reasignará la tarea."),
       h('p',{style:{color:"#94a3b8",fontSize:13,marginTop:16}},"Podés cerrar esta ventana.")));
 
+  if(view && view.startsWith("completar_")) { return h(CompletarView,{recId:view.replace("completar_",""),recs,setRecs,loaded}); }
   if(view && view.startsWith("calificar_")) { return h(CalificarView,{recId:Number(view.replace("calificar_","")),recs,setRecs,loaded}); }
 
   if(view==="rechazar") return h(PantallaRechazo,{onConfirm:handleRechazar});
@@ -1688,7 +1864,7 @@ Te avisaremos cuando esté resuelto.
       h('button',{onClick:()=>setView("socio"),style:{padding:"8px 16px",borderRadius:20,border:"none",background:view==="socio"?"#3b82f6":"rgba(255,255,255,0.9)",color:view==="socio"?"white":"#374151",cursor:"pointer",fontSize:13,fontWeight:600,boxShadow:"0 2px 12px rgba(0,0,0,0.2)"}},"📋 Formulario"),
       h('button',{onClick:()=>setView("admin"),style:{padding:"8px 16px",borderRadius:20,border:"none",background:view==="admin"?"#0f172a":"rgba(255,255,255,0.9)",color:view==="admin"?"white":"#374151",cursor:"pointer",fontSize:13,fontWeight:600,boxShadow:"0 2px 12px rgba(0,0,0,0.2)"}},"⚙️ Panel")),
     view==="socio" && h(FormularioSocio,{onSubmit:add,reclamos:recs}),
-    view==="admin" && !auth && h(Login,{onLogin:()=>{setAuth(true);sessionStorage.setItem('panelAuth','1');},onSeguimiento:num=>setView("seguimiento_"+num)}),
+    view==="admin" && !auth && h(Login,{onLogin:()=>{setAuth(true);sessionStorage.setItem('panelAuth','1');}}),
     view==="admin" && auth && h(PanelAdmin,{recs,onUpdate:upd,ejecutores,setEjecutores,onRefresh:()=>sbGetAll().then(setRecs)}));
 }
 
@@ -1696,6 +1872,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
+
 
 
 
