@@ -21,7 +21,7 @@ const NOTIFY_EMAIL   = ""; // Set in ⚙️ Configuración
 
 // Plazos de escalado por criticidad (días)
 const ESCALADO = {
-  mega_urgente: { recordatorio: 1/144, directivo: 1/72 }, // 10min / 20min
+  mega_urgente: { recordatorio: 1/720, directivo: 1/360 }, // 2min / 4min
   urgente: { recordatorio: 1,  directivo: 2  },
   alta:    { recordatorio: 2,  directivo: 4  },
   media:   { recordatorio: 3,  directivo: 7  },
@@ -30,36 +30,24 @@ const ESCALADO = {
 
 function getMailConfig() {
   const cfg = ls.get("config") || {};
-  return {
-    intendencia:          cfg.mailIntendencia || "",
-    admin:                cfg.mailAdmin || "",
-    directivosIntendencia: cfg.directivosIntendencia || [],
-    directivosAdmin:       cfg.directivosAdmin || [],
-    scriptUrl:            cfg.scriptUrl || SCRIPT_URL,
-  };
+  return { scriptUrl: cfg.scriptUrl || SCRIPT_URL, categorias: cfg.categorias || {} };
+}
+function getCatCfg(cat) {
+  const cfg = ls.get("config") || {};
+  return (cfg.categorias || {})[cat] || { responsables: [], directivos: [] };
 }
 function getDirectivos(cat) {
-  const cfg = getMailConfig();
-  return isAdminCat(cat) ? cfg.directivosAdmin : cfg.directivosIntendencia;
+  return getCatCfg(cat).directivos || [];
 }
+function getDirectivosByCat(cat) { return getDirectivos(cat); }
 
 function isAdminCat(cat) {
   return ["servicios","cuotas"].includes(cat);
 }
 
 function getResponsableMail(cat) {
-  const cfg = ls.get("config") || {};
-  // Check category-specific config first
-  const catCfg = (cfg.categoriaConfig||{})[cat];
-  if(catCfg?.responsable) return catCfg.responsable;
-  // Fallback to area config
-  return isAdminCat(cat) ? (cfg.mailAdmin||"") : (cfg.mailIntendencia||"");
-}
-function getDirectivosByCat(cat) {
-  const cfg = ls.get("config") || {};
-  const catCfg = (cfg.categoriaConfig||{})[cat];
-  if(catCfg?.directivos?.length) return catCfg.directivos;
-  return getDirectivos(cat);
+  const resp = getCatCfg(cat).responsables || [];
+  return resp.length ? resp[0].mail : "";
 }
 
 function diasDesde(isoDate) {
@@ -913,7 +901,7 @@ function PersonList({list, onRemove, onAdd}) {
 }
 
 function PanelConfig({onClose, onSaveEjecutores}) {
-  const defaultCfg = {scriptUrl:"",mailIntendencia:"",mailAdmin:"",directivosIntendencia:[],directivosAdmin:[]};
+  const defaultCfg = {scriptUrl:"",categorias:{}};
   const [ejs,setEjs] = useState([]);
   const [cfg,setCfg] = useState(defaultCfg);
   const [saved,setSaved] = useState(false);
@@ -921,7 +909,7 @@ function PanelConfig({onClose, onSaveEjecutores}) {
 
   useEffect(()=>{
     setEjs(ls.get("ejecutores")||[]);
-    setCfg(ls.get("config")||defaultCfg);
+    setCfg({...defaultCfg,...(ls.get("config")||{})});
   },[]);
 
   const save = () => {
@@ -948,31 +936,28 @@ function PanelConfig({onClose, onSaveEjecutores}) {
 
         // TAB ROLES
         tab==="roles" && h('div',null,
-          // Ejecutores / Empleados
           h('div',{style:{marginBottom:20}},
             h('div',{style:{fontSize:13,fontWeight:700,color:"#0f172a",marginBottom:4}},"👷 Ejecutores / Empleados"),
-            h('div',{style:{fontSize:12,color:"#64748b",marginBottom:10}},"Son las personas que ejecutan las tareas asignadas."),
+            h('div',{style:{fontSize:12,color:"#64748b",marginBottom:10}},"Personas que ejecutan las tareas."),
             h(PersonList,{list:ejs,onRemove:i=>setEjs(e=>e.filter((_,idx)=>idx!==i)),onAdd:n=>setEjs(e=>[...e,n])})),
-          h('div',{style:{height:1,background:"#f1f5f9",marginBottom:20}}),
-          // Responsables
-          h('div',{style:{marginBottom:20}},
-            h('div',{style:{fontSize:13,fontWeight:700,color:"#0f172a",marginBottom:4}},"🏗️ Responsable Intendencia"),
-            h('div',{style:{fontSize:12,color:"#64748b",marginBottom:8}},"Recibe los nuevos reclamos de intendencia."),
-            h('input',{value:cfg.mailIntendencia||"",onChange:e=>setCfg(c=>({...c,mailIntendencia:e.target.value})),placeholder:"email@club.com",type:"email",style:iS()})),
-          h('div',{style:{marginBottom:20}},
-            h('div',{style:{fontSize:13,fontWeight:700,color:"#0f172a",marginBottom:4}},"💼 Responsable Administración"),
-            h('div',{style:{fontSize:12,color:"#64748b",marginBottom:8}},"Recibe los nuevos reclamos de administración."),
-            h('input',{value:cfg.mailAdmin||"",onChange:e=>setCfg(c=>({...c,mailAdmin:e.target.value})),placeholder:"email@club.com",type:"email",style:iS()})),
-          h('div',{style:{height:1,background:"#f1f5f9",marginBottom:20}}),
-          // Directivos
-          h('div',{style:{marginBottom:20}},
-            h('div',{style:{fontSize:13,fontWeight:700,color:"#0f172a",marginBottom:4}},"🎖️ Directivos — Intendencia"),
-            h('div',{style:{fontSize:12,color:"#64748b",marginBottom:10}},"Reciben escalados de temas de intendencia."),
-            h(PersonList,{list:cfg.directivosIntendencia||[],onRemove:i=>setCfg(c=>({...c,directivosIntendencia:c.directivosIntendencia.filter((_,idx)=>idx!==i)})),onAdd:n=>setCfg(c=>({...c,directivosIntendencia:[...(c.directivosIntendencia||[]),n]}))})),
-          h('div',{style:{marginBottom:4}},
-            h('div',{style:{fontSize:13,fontWeight:700,color:"#0f172a",marginBottom:4}},"🎖️ Directivos — Administración"),
-            h('div',{style:{fontSize:12,color:"#64748b",marginBottom:10}},"Reciben escalados de temas de administración."),
-            h(PersonList,{list:cfg.directivosAdmin||[],onRemove:i=>setCfg(c=>({...c,directivosAdmin:c.directivosAdmin.filter((_,idx)=>idx!==i)})),onAdd:n=>setCfg(c=>({...c,directivosAdmin:[...(c.directivosAdmin||[]),n]}))}))),
+          h('div',{style:{height:1,background:"#f1f5f9",marginBottom:16}}),
+          h('div',{style:{fontSize:13,fontWeight:700,color:"#0f172a",marginBottom:4}},"📋 Responsables y directivos por área"),
+          h('div',{style:{fontSize:12,color:"#64748b",marginBottom:14}},"Configurá para cada tipo de problema quiénes reciben los mails y escalados."),
+          ...Object.values(CATS).map(cat=>h('div',{key:cat.id,style:{marginBottom:16,background:"#f8fafc",borderRadius:12,padding:"14px 16px"}},
+            h('div',{style:{fontSize:13,fontWeight:700,color:"#0f172a",marginBottom:10}},cat.icon+" "+cat.label),
+            h('div',{style:{marginBottom:10}},
+              h('div',{style:{fontSize:11,fontWeight:600,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:0.5}},"Responsables (reciben nuevos reclamos y recordatorios)"),
+              h(PersonList,{
+                list:(cfg.categorias||{})[cat.id]?.responsables||[],
+                onRemove:i=>setCfg(c=>({...c,categorias:{...(c.categorias||{}),[cat.id]:{...(c.categorias?.[cat.id]||{}),responsables:((c.categorias?.[cat.id]?.responsables)||[]).filter((_,idx)=>idx!==i)}}})),
+                onAdd:n=>setCfg(c=>({...c,categorias:{...(c.categorias||{}),[cat.id]:{...(c.categorias?.[cat.id]||{}),responsables:[...((c.categorias?.[cat.id]?.responsables)||[]),n]}}}))})),
+            h('div',null,
+              h('div',{style:{fontSize:11,fontWeight:600,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:0.5}},"Directivos (reciben escalados)"),
+              h(PersonList,{
+                list:(cfg.categorias||{})[cat.id]?.directivos||[],
+                onRemove:i=>setCfg(c=>({...c,categorias:{...(c.categorias||{}),[cat.id]:{...(c.categorias?.[cat.id]||{}),directivos:((c.categorias?.[cat.id]?.directivos)||[]).filter((_,idx)=>idx!==i)}}})),
+                onAdd:n=>setCfg(c=>({...c,categorias:{...(c.categorias||{}),[cat.id]:{...(c.categorias?.[cat.id]||{}),directivos:[...((c.categorias?.[cat.id]?.directivos)||[]),n]}}}))}))
+          ))),
 
         // TAB ESCALADO
         tab==="escalado" && h('div',null,
@@ -987,8 +972,8 @@ function PanelConfig({onClose, onSaveEjecutores}) {
                   const pri = PRIS.find(x=>x.id===crit);
                   return h('tr',{key:crit,style:{borderTop:"1px solid #f1f5f9",background:i%2===0?"white":"#fafafa"}},
                     h('td',{style:{padding:"10px 14px"}},h('span',{style:{display:"inline-block",padding:"2px 8px",borderRadius:20,fontSize:12,fontWeight:600,color:pri?.color,background:pri?.color+"22"}},pri?.label)),
-                    h('td',{style:{padding:"10px 14px",fontSize:13,color:"#374151"}},p.recordatorio+" día"+(p.recordatorio>1?"s":"")),
-                    h('td',{style:{padding:"10px 14px",fontSize:13,color:"#374151"}},p.directivo+" día"+(p.directivo>1?"s":"")));
+                    h('td',{style:{padding:"10px 14px",fontSize:13,color:"#374151"}},crit==="mega_urgente"?Math.round(p.recordatorio*1440)+" min":p.recordatorio+" día"+(p.recordatorio>1?"s":"")),
+                    h('td',{style:{padding:"10px 14px",fontSize:13,color:"#374151"}},crit==="mega_urgente"?Math.round(p.directivo*1440)+" min":p.directivo+" día"+(p.directivo>1?"s":"")));
                 })))),
           h('div',{style:{background:"#eff6ff",border:"1.5px solid #bfdbfe",borderRadius:10,padding:12,fontSize:12,color:"#1d4ed8",lineHeight:1.6}},
             "💡 Los plazos se cuentan desde la creación del reclamo. Si el ejecutor rechaza, el tiempo restante no se renueva — el intendente tiene menos tiempo para reasignar.")),
@@ -1147,7 +1132,7 @@ function ModalProyecto({proyecto, onClose, onSave, ejecutores, recs}) {
                 h('button',{onClick:()=>set("directivos",(f.directivos).filter((_,idx)=>idx!==i)),style:{background:"none",border:"none",cursor:"pointer",color:"#ef4444"}},"✕"))),
               h('select',{onChange:e=>{if(e.target.value)set("directivos",[...(f.directivos||[]),e.target.value]);e.target.value="";},style:{...aS(),marginTop:4}},
                 h('option',{value:""},"+ Agregar directivo..."),
-                ...(getMailConfig().directivosIntendencia||[]).concat(getMailConfig().directivosAdmin||[]).map(d=>h('option',{key:d.mail,value:d.nombre+" ("+d.mail+")"},d.nombre))))),
+                ...Object.values(CATS).flatMap(cat=>(ls.get("config")?.categorias?.[cat.id]?.directivos||[])).map(d=>h('option',{key:d.mail,value:d.nombre+" ("+d.mail+")"},d.nombre))))),
           h('div',null,
             h('div',{style:{fontSize:13,fontWeight:600,color:"#374151",marginBottom:8}},"👷 Empleados / ejecutores involucrados"),
             h('div',{style:{display:"flex",flexDirection:"column",gap:6}},
@@ -1337,7 +1322,7 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
         h('h1',{style:{fontFamily:"'Playfair Display',serif",color:"white",fontSize:22,margin:0}},"Intendencia del Club")),
       h('div',{style:{display:"flex",gap:8}},
         h('button',{onClick:()=>setShowCfg(true),style:{padding:"8px 14px",background:"rgba(255,255,255,0.1)",color:"white",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600}},"⚙️ Configuración"),
-        h('button',{onClick:async()=>{if(confirm("⚠️ ¿Borrar TODOS los reclamos? Esta acción no se puede deshacer.")){const ok=await sbClearAll();if(ok){setRecs([]);alert("✅ Todos los reclamos fueron eliminados.");}else{alert("❌ Error al eliminar.");}}},style:{padding:"8px 14px",background:"rgba(239,68,68,0.3)",color:"#fca5a5",border:"1px solid rgba(239,68,68,0.4)",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600}},"🗑️ Limpiar BD"),
+
         h('button',{onClick:()=>{const d=prompt("Simular cuántos días transcurridos (ej: 4):");if(d&&!isNaN(d))testAlerts(Number(d));},style:{padding:"8px 14px",background:"rgba(255,255,255,0.1)",color:"white",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600}},"🧪 Test"),
         h('button',{onClick:checkAlerts,disabled:checking,style:{padding:"8px 14px",background:checking?"#475569":"#f97316",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600}},checking?"Verificando...":"⚠️ Revisar alertas"))),
     // Main tabs: Reclamos | Proyectos
@@ -1675,7 +1660,7 @@ function App() {
             comentarios:[...(r.comentarios||[]),{texto:"Reclamo reabierto por el usuario — requiere revisión.",fecha:new Date().toISOString(),autor:"Sistema"}]};
           await sbUpsert(updated);
           // Notify responsable
-          const respMail = isAdminCat(r.cat)?(ls.get("config")||{}).mailAdmin:(ls.get("config")||{}).mailIntendencia;
+          const respMail = getResponsableMail(r.cat);
           if(respMail) await sendEmail({to:respMail,subject:`[Club] 🔄 Reclamo reabierto — ${r.numero}`,body:`El usuario reabrió el reclamo ${r.numero} (${r.sector}) porque no quedó conforme con la resolución.\n\nRequiere revisión inmediata.`});
           setView("reabrir_ok");
         }
@@ -1872,6 +1857,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
+
 
 
 
