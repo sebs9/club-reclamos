@@ -1301,24 +1301,72 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
     await checkAlerts(diasSimulados);
   };
 
-  const checkAlerts = async () => {
+  const checkAlerts = async (diasOverride) => {
     setChecking(true);
-    const ahora=new Date();
-    const por=recs.filter(r=>{
-      if(["completada","consolidada","sin_resolucion","vinculado_proyecto"].includes(r.estadoAvance)) return false;
-      if(!r.fechaCierre) return false;
-      const d=(new Date(r.fechaCierre)-ahora)/86400000;
-      return d>=0&&d<5;
-    });
-    if(por.length){
-      for(const r of por){
-        const d=(new Date(r.fechaCierre)-ahora)/86400000;
-        const dias=d<1?"menos de 1 día":d<2?"1 día":"5 días";
-        const dest=[r.ejecutorMail].filter(Boolean);
-        if(dest.length) await sendEmail({to:dest,subject:`[Club] ⚠️ Recordatorio — ${r.numero} vence en ${dias}`,body:`Recordatorio: ${r.numero} · ${r.sector}\nVence: ${fd(r.fechaCierre)}\nEjecutor: ${r.ejecutorNombre||"—"}`});
+    const ahora = new Date();
+    const appUrl = window.location.href.split("?")[0];
+    let enviados = 0;
+    let actualizados = [...recs];
+
+    const diasDesdeRec = (isoDate) => {
+      if(diasOverride != null) return diasOverride;
+      return (ahora - new Date(isoDate)) / 86400000;
+    };
+
+    for (const r of recs) {
+      if(["completada","consolidada","vinculado_proyecto"].includes(r.estadoAvance)) continue;
+
+      const crit = r.criticidad || r.pri || "media";
+      const plazos = ESCALADO[crit] || ESCALADO.media;
+      const catCfg = getCatCfg(r.cat);
+      const respMails = (catCfg.responsables||[]).map(x=>x.mail).filter(Boolean);
+      const dirMails  = (catCfg.directivos||[]).map(x=>x.mail).filter(Boolean);
+      const diasCreado = diasDesdeRec(r.createdAt);
+
+      // CASO 1: Sin ejecutor o sin fechas
+      if (!r.ejecutorMail || !r.fechaInicioOriginal) {
+        if (diasCreado >= plazos.directivo) {
+          const dest=[...dirMails,...respMails].filter(Boolean);
+          if(dest.length){ await sendEmail({to:dest, subject:`[Club] 🚨 Reclamo sin asignar — ${r.numero}`, body:`El reclamo ${r.numero} lleva ${formatTiempoJS(diasCreado)} sin ejecutor ni fechas.\n\nSector: ${r.sector}\nDescripción: ${r.desc}\nCriticidad: ${crit}\n\n${appUrl}`}); enviados++; }
+        } else if (diasCreado >= plazos.recordatorio) {
+          if(respMails.length){ await sendEmail({to:respMails, subject:`[Club] ⏰ Reclamo pendiente de asignación — ${r.numero}`, body:`El reclamo ${r.numero} no tiene ejecutor ni fechas asignadas.\n\nSector: ${r.sector}\nDescripción: ${r.desc}\n\nIngresá al panel:\n${appUrl}`}); enviados++; }
+        }
+        continue;
       }
-      alert("✅ Alertas enviadas para "+por.length+" tarea(s).");
-    } else { alert("✅ No hay tareas próximas a vencer."); }
+
+      // CASO 2: Ejecutor asignado pero no confirmó
+      if (r.ejecutorMail && !r.ejecutorConfirmado && !r.ejecutorRechazado) {
+        const diasAsig = r.fechaAsignacion ? diasDesdeRec(r.fechaAsignacion) : diasCreado;
+        if (diasAsig >= plazos.directivo) {
+          const dest=[...dirMails,...respMails].filter(Boolean);
+          if(dest.length){ await sendEmail({to:dest, subject:`[Club] 🚨 Ejecutor no confirmó — ${r.numero}`, body:`El ejecutor ${r.ejecutorNombre} no confirmó la tarea ${r.numero} hace ${formatTiempoJS(diasAsig)}.\n\nSector: ${r.sector}\n\nSe requiere reasignación.\n\n${appUrl}`}); enviados++; }
+        } else if (diasAsig >= plazos.recordatorio) {
+          const dest=[r.ejecutorMail,...respMails].filter(Boolean);
+          if(dest.length){ await sendEmail({to:dest, subject:`[Club] ⏰ Confirmación pendiente — ${r.numero}`, body:`Recordatorio: ${r.ejecutorNombre}, por favor confirmá o rechazá la tarea ${r.numero}.\n\nConfirmar: ${appUrl}?confirmar=${r.id}\nRechazar: ${appUrl}?rechazar=${r.id}`}); enviados++; }
+        }
+      }
+
+      // CASO 3: Fecha de cierre excedida → marcar demorada
+      const fechaCierre = r.fechaCierreActualizada || r.fechaCierre;
+      if (fechaCierre && !diasOverride && new Date(fechaCierre)<ahora && r.estadoAvance!=="demorada") {
+        const updated={...r,estadoAvance:"demorada",comentarios:[...(r.comentarios||[]),{texto:"Marcada automáticamente como demorada.",fecha:ahora.toISOString(),autor:"Sistema"}]};
+        await sbUpsert(updated);
+        actualizados=actualizados.map(x=>x.id===r.id?updated:x);
+        const dest=[...dirMails,...respMails].filter(Boolean);
+        if(dest.length){ await sendEmail({to:dest, subject:`[Club] 🔴 Tarea demorada — ${r.numero}`, body:`La tarea ${r.numero} excedió su fecha de cierre.\n\nSector: ${r.sector}\nEjecutor: ${r.ejecutorNombre||"—"}\nFecha cierre: ${fd(fechaCierre)}\n\n${appUrl}`}); enviados++; }
+      }
+
+      // CASO 4: Recordatorio al ejecutor cuando llega fecha inicio
+      const fechaInicio = r.fechaInicioActualizada || r.fechaInicioEsperado;
+      if(r.ejecutorConfirmado && r.ejecutorMail && fechaInicio &&
+         !diasOverride && new Date(fechaInicio)<=ahora && r.estadoAvance==="bajo_analisis"){
+        await sendEmail({to:[r.ejecutorMail], subject:`[Club] 📋 Tu tarea empieza hoy — ${r.numero}`, body:`Hola ${r.ejecutorNombre},\n\nLa tarea ${r.numero} debería iniciarse hoy.\n\nSector: ${r.sector}\nDescripción: ${r.desc}\n\nCuando termines confirmá la resolución:\n${appUrl}?completar=${r.id}`});
+        enviados++;
+      }
+    }
+
+    if(!diasOverride) setRecs(actualizados);
+    alert(enviados>0?`✅ Se enviaron ${enviados} notificaciones.`:"ℹ️ Sin alertas pendientes en este momento.");
     setChecking(false);
   };
 
@@ -1876,7 +1924,6 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
-
 
 
 
