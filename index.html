@@ -182,6 +182,22 @@ function getTiming(r) {
   return {label:"A tiempo", color:"#22c55e", bg:"#f0fdf4"};
 }
 
+function getAccionRequerida(r) {
+  if (["completada","consolidada","vinculado_proyecto"].includes(r.estadoAvance)) return null;
+  const crit = r.criticidad || r.pri || "media";
+  const plazoDias = {urgente:1,alta:2,media:3,baja:5}[crit] || 3;
+  const diasCreado = (new Date() - new Date(r.createdAt)) / 86400000;
+  if (!r.ejecutorMail || r.ejecutorMail.trim() === "") {
+    if (diasCreado > plazoDias) return {label:"⚠️ Fuera de plazo — acción urgente", color:"#dc2626", bg:"#fef2f2"};
+    if (crit === "urgente") return {label:"🔴 Urgente — asignar ahora", color:"#dc2626", bg:"#fef2f2"};
+    return {label:"📋 Pendiente asignación", color:"#f97316", bg:"#fff7ed"};
+  }
+  if (r.ejecutorRechazado) return {label:"❌ Reasignar ejecutor", color:"#dc2626", bg:"#fef2f2"};
+  if (!r.ejecutorConfirmado) return {label:"⏳ Esperando confirmación", color:"#1d4ed8", bg:"#eff6ff"};
+  if (r.estadoAvance === "sin_resolucion") return {label:"🟡 Sin resolución — en seguimiento", color:"#d97706", bg:"#fffbeb"};
+  return null;
+}
+
 // ── LOCAL STORE ────────────────────────────────────────────────────────────
 const ls = {
   get: k => { try { const v=localStorage.getItem(k); return v?JSON.parse(v):null; } catch{return null;} },
@@ -1935,6 +1951,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
+
 
 
 
