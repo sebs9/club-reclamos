@@ -392,7 +392,7 @@ function FormularioSocio({onSubmit, reclamos}) {
     if (!validate()) return;
     setSending(true);
     // Generate sequential number by category prefix
-    const catPrefixes = {infraestructura:"I",limpieza:"L",mantenimiento:"M",equipamiento:"E",preparacion:"P",servicios:"S",cuotas:"C"};
+    const catPrefixes = {infraestructura:"O",limpieza:"L",mantenimiento:"M",equipamiento:"E",preparacion:"P",servicios:"S",cuotas:"C"};
     const prefix = catPrefixes[f.cat] || "R";
     const existing = reclamos.filter(r=>r.numero?.startsWith(prefix+"-")).length;
     const seq = String(existing+1).padStart(3,"0");
@@ -400,9 +400,8 @@ function FormularioSocio({onSubmit, reclamos}) {
     const n = prefix+"-"+total+"-"+seq;
     setNum(n);
     const catConf=CATS[f.cat], pri=PRIS.find(p=>p.id===f.pri);
-    const dC=new Date(); dC.setDate(dC.getDate()+(pri?.dias||7));
     const rec = {...f, numero:n, id:Date.now(), createdAt:new Date().toISOString(),
-      estadoAvance:"bajo_analisis", fechaCierre:dC.toISOString().split("T")[0],
+      estadoAvance:"bajo_analisis", fechaCierre:"",
       responsableArea:{nombre:"",mail:""},
       comentarios:[], descripcionResolucion:"", presupuesto:"", presupuestoDetalle:"",
       ejecutorMail:"", ejecutorNombre:"", ejecutorConfirmado:false, ejecutorRechazado:false,
@@ -650,9 +649,11 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
       updatedAt:new Date().toISOString()};
     await onSave(savedRec);
     // When marked as completada → set to esperando_validacion (directivo must approve first)
-    if(f.estadoAvance==="completada" && rec.estadoAvance!=="completada" && f.descripcionResolucion.trim()) {
+    if((f.estadoAvance==="completada"||f.estadoAvance==="esperando_validacion") && !["completada","esperando_validacion"].includes(rec.estadoAvance) && f.descripcionResolucion.trim()) {
+      // Force state to esperando_validacion
+      savedRec = {...savedRec, estadoAvance:"esperando_validacion"};
       // Update state to esperando_validacion instead of completada until directivo approves
-      const recEspera = {...savedRec, estadoAvance:"esperando_validacion"};
+      const recEspera = {...savedRec};
       await sbUpsert(recEspera);
       setRecs(prev=>prev.map(r=>r.id===recEspera.id?recEspera:r));
       // Notify directivos
@@ -715,7 +716,7 @@ Resolución: ${descripcion||"—"}`});
     setSending(false); alert("✅ Notificación enviada.");
   };
 
-  const TABS = [["gestion","Gestión"],["asignacion","Asignación"]];
+  const TABS = [["gestion","Gestión"],["asignacion","Asignación"],["resolucion","Resolución"]];
 
   return h('div',{style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20,overflowY:"auto"}},
     h('div',{style:{background:"white",borderRadius:20,width:"100%",maxWidth:580,maxHeight:"93vh",overflowY:"auto"}},
@@ -748,11 +749,18 @@ Resolución: ${descripcion||"—"}`});
             h('div',{style:{display:"flex",gap:8,flexWrap:"wrap"}},
               ...rec.adjuntos.map((a,i)=>{
                 const url = a.url || (typeof a === "string" ? a : null);
-                if(!url) return h('div',{key:i,style:{fontSize:11,color:"#94a3b8",padding:"4px 8px",background:"#f8fafc",borderRadius:6}},a.nombre||"archivo");
-                return a.tipo?.startsWith("video")
-                  ? h('a',{key:i,href:url,target:"_blank",style:{display:"inline-flex",alignItems:"center",gap:4,padding:"6px 12px",background:"#f1f5f9",borderRadius:8,fontSize:12,color:"#374151",fontWeight:600,textDecoration:"none"}},"🎥 Ver video")
-                  : h('a',{key:i,href:url,target:"_blank"},
-                      h('img',{src:url,alt:a.nombre,style:{width:80,height:80,objectFit:"cover",borderRadius:8,border:"1.5px solid #e2e8f0",cursor:"pointer"}}));
+                if(!url) return h('div',{key:i,style:{fontSize:11,color:"#94a3b8",padding:"6px 10px",background:"#f8fafc",borderRadius:6,display:"flex",alignItems:"center",gap:4}},
+                  h('span',null,"📎"), h('span',null,a.nombre||"archivo sin URL"));
+                if(a.tipo?.startsWith("video"))
+                  return h('a',{key:i,href:url,target:"_blank",style:{display:"inline-flex",alignItems:"center",gap:4,padding:"6px 12px",background:"#f1f5f9",borderRadius:8,fontSize:12,color:"#374151",fontWeight:600,textDecoration:"none"}},"🎥 Ver video");
+                return h('div',{key:i,style:{position:"relative"}},
+                  h('a',{href:url,target:"_blank"},
+                    h('img',{src:url,alt:a.nombre,
+                      onError:e=>{e.target.style.display="none";e.target.nextSibling.style.display="flex";},
+                      style:{width:80,height:80,objectFit:"cover",borderRadius:8,border:"1.5px solid #e2e8f0",cursor:"pointer",display:"block"}})),
+                  h('a',{href:url,target:"_blank",style:{display:"none",width:80,height:80,borderRadius:8,border:"1.5px solid #e2e8f0",background:"#f1f5f9",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:2,textDecoration:"none"}},
+                    h('span',{style:{fontSize:20}},"🖼️"),
+                    h('span',{style:{fontSize:9,color:"#64748b",textAlign:"center",padding:"0 4px"}},a.nombre?.substring(0,15)||"foto")));
               }))),
           rec.responsableArea?.nombre && h('div',{style:{marginTop:8,fontSize:12,color:"#64748b"}},"👔 "+rec.responsableArea.nombre),
           rec.posiblesDuplicados?.length > 0 && h('div',{style:{marginTop:8,background:"#fef9c3",border:"1.5px solid #fde047",borderRadius:8,padding:"8px 12px"}},
@@ -832,21 +840,7 @@ Resolución: ${descripcion||"—"}`});
                   h('div',null,h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Inicio esperado *"),h('input',{type:"date",value:f.fechaInicioEsperado,onChange:e=>set("fechaInicioEsperado",e.target.value),min:new Date().toISOString().split("T")[0],style:aS()})),
                   h('div',null,h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Cierre esperado *"),h('input',{type:"date",value:f.fechaCierre,onChange:e=>set("fechaCierre",e.target.value),min:f.fechaInicioEsperado||new Date().toISOString().split("T")[0],style:aS()}))),
           f.fechaInicioEsperado && f.fechaCierre && (new Date(f.fechaCierre)-new Date(f.fechaInicioEsperado))/86400000 > 30 && h('div',{style:{background:"#fff7ed",border:"1.5px solid #fed7aa",borderRadius:8,padding:"8px 12px",marginBottom:8,fontSize:12,color:"#92400e"}},"⚠️ Esta tarea tiene más de 30 días de duración. Asegurate de que sea necesario."),
-          // Resolución (moved from tab)
-          h('div',{style:{marginTop:16,paddingTop:16,borderTop:"1.5px solid #f1f5f9"}},
-            h('div',{style:{fontSize:12,fontWeight:700,color:"#374151",marginBottom:8}},"📋 Resolución"),
-            h('div',{style:{marginBottom:10}},
-              h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Descripción de lo realizado"),
-              h('textarea',{value:f.descripcionResolucion||"",onChange:e=>set("descripcionResolucion",e.target.value),rows:3,placeholder:"Describí qué se hizo para resolver el problema...",style:{...aS(),resize:"vertical"}})),
-            h('div',null,
-              h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Foto / video de evidencia (opcional)"),
-              h('input',{ref:fileRef,type:"file",accept:"image/*,video/*",multiple:true,style:{display:"none"},onChange:e=>{Array.from(e.target.files).forEach(file=>{const r=new FileReader();r.onload=ev=>set("adjuntosResolucion",[...(f.adjuntosResolucion||[]),{nombre:file.name,tipo:file.type,data:ev.target.result}]);r.readAsDataURL(file);});e.target.value="";}}),
-              h('div',{style:{display:"flex",gap:8,flexWrap:"wrap",marginBottom:(f.adjuntosResolucion||[]).length?8:0}},
-                ...(f.adjuntosResolucion||[]).filter(a=>a.url||a.data).map((a,i)=>h('div',{key:i,style:{display:"flex",alignItems:"center",gap:6,background:"#f1f5f9",borderRadius:8,padding:"5px 10px",fontSize:12}},
-                  h('span',null,a.tipo?.startsWith("video")?"🎥":"📷"),
-                  h('span',{style:{maxWidth:100,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},a.nombre||"foto"),
-                  h('button',{onClick:()=>set("adjuntosResolucion",(f.adjuntosResolucion||[]).filter((_,idx)=>idx!==i)),style:{background:"none",border:"none",cursor:"pointer",color:"#ef4444",fontSize:14,padding:0}},"✕")))),
-              h('button',{onClick:()=>fileRef.current?.click(),style:{padding:"7px 14px",borderRadius:8,border:"1.5px dashed #e2e8f0",background:"transparent",color:"#64748b",cursor:"pointer",fontSize:12}},"📎 Adjuntar evidencia"))),
+
           // Same-day: show time fields
           f.fechaInicioEsperado && f.fechaCierre && f.fechaInicioEsperado===f.fechaCierre && h('div',{style:{background:"#f0fdf4",border:"1.5px solid #bbf7d0",borderRadius:10,padding:12,marginBottom:8}},
             h('div',{style:{fontSize:12,fontWeight:600,color:"#15803d",marginBottom:8}},"🕐 Tarea de un día — podés especificar el horario"),
@@ -946,7 +940,13 @@ Resolución: ${descripcion||"—"}`});
                       : h('span',{style:{maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},a.nombre),
                 h('button',{onClick:()=>setF(p=>({...p,adjuntosResolucion:p.adjuntosResolucion.filter((_,idx)=>idx!==i)})),style:{background:"none",border:"none",cursor:"pointer",color:"#ef4444",fontSize:14,padding:0}},"✕")))),
             h('button',{onClick:()=>fileRef.current.click(),style:{padding:"8px 16px",borderRadius:8,border:"1.5px dashed #e2e8f0",background:"transparent",color:"#64748b",cursor:"pointer",fontSize:13}},"📎 Adjuntar foto / video")),
-          f.estadoAvance==="completada" && h('div',{style:{background:"#f0fdf4",border:"1.5px solid #bbf7d0",borderRadius:8,padding:"10px 14px",fontSize:12,color:"#15803d",marginBottom:8}},"✅ Al guardar como completada se notificará automáticamente al usuario.")),
+          !["completada","consolidada","esperando_validacion"].includes(f.estadoAvance) && h('div',{style:{marginTop:16,paddingTop:16,borderTop:"1.5px solid #f1f5f9"}},
+            h('button',{onClick:async()=>{
+              if(!f.descripcionResolucion?.trim()){setSaveErr("La descripción de lo realizado es obligatoria para completar.");return;}
+              if(!confirm("¿Marcar como completado y enviar al directivo para validación?")) return;
+              await handleSave();
+            },style:{width:"100%",padding:"13px",background:"linear-gradient(135deg,#22c55e,#15803d)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700}},"✅ Marcar como completado — enviar a validación")),
+          ["esperando_validacion"].includes(f.estadoAvance) && h('div',{style:{background:"#f5f3ff",border:"1.5px solid #ddd6fe",borderRadius:8,padding:"10px 14px",fontSize:12,color:"#6d28d9",marginBottom:8}},"🔵 Esperando validación del directivo. Una vez aprobado, el usuario recibirá el mail de calificación.")),
 
         // TAB HISTORIAL
         tab==="historial" && h('div',null,
@@ -2092,6 +2092,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
+
 
 
 
