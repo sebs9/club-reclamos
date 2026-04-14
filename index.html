@@ -21,11 +21,10 @@ const NOTIFY_EMAIL   = ""; // Set in ⚙️ Configuración
 
 // Plazos de escalado por criticidad (días)
 const ESCALADO = {
-  mega_urgente: { recordatorio: 1/720, directivo: 1/360 }, // 2min / 4min
-  urgente: { recordatorio: 1,  directivo: 2  },
-  alta:    { recordatorio: 2,  directivo: 4  },
-  media:   { recordatorio: 3,  directivo: 7  },
-  baja:    { recordatorio: 5,  directivo: 10 },
+  urgente: { dias: 1 },
+  alta:    { dias: 2 },
+  media:   { dias: 3 },
+  baja:    { dias: 5 },
 };
 
 function getMailConfig() {
@@ -150,7 +149,6 @@ const CATS = {
 };
 
 const PRIS = [
-  {id:"mega_urgente",label:"🔴 Mega urgente",color:"#7f1d1d",dias:0},
   {id:"urgente",label:"Urgente",color:"#ef4444",dias:1},
   {id:"alta",label:"Alta",color:"#f97316",dias:3},
   {id:"media",label:"Media",color:"#eab308",dias:7},
@@ -532,11 +530,13 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
     fechaInicioEsperado:rec.fechaInicioEsperado||"", fechaCierre:rec.fechaCierre||"",
     ejecutorMail:rec.ejecutorMail||"", ejecutorNombre:rec.ejecutorNombre||"",
     tipoEjecutor:rec.tipoEjecutor||"interno", empresaNombre:rec.empresaNombre||"", empresaTelefono:rec.empresaTelefono||"",
+    ejecutores_lista:rec.ejecutores_lista||[],
     presupuesto:rec.presupuesto||"", presupuestoDetalle:rec.presupuestoDetalle||"",
     descripcionResolucion:rec.descripcionResolucion||"", evidenciaUrl:rec.evidenciaUrl||"",
     nuevoComentario:"",
     // Campos de actualización de fecha (cuando ya fue asignado)
     fechaInicioActualizada:rec.fechaInicioActualizada||"",
+    horaInicio:rec.horaInicio||"", horaFin:rec.horaFin||"",
     fechaCierreActualizada:rec.fechaCierreActualizada||"",
     motivoActualizacion:rec.motivoActualizacion||"",
     adjuntosResolucion:rec.adjuntosResolucion||[],
@@ -581,6 +581,8 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
     const ejecutorMailOriginal = rec.ejecutorMailOriginal || (f.ejecutorMail !== rec.ejecutorMail ? f.ejecutorMail : rec.ejecutorMailOriginal);
 
     const fechaAsignacion = (f.ejecutorMail && f.ejecutorMail!==rec.ejecutorMail) ? new Date().toISOString() : rec.fechaAsignacion;
+    const ejListaNuevos = (f.ejecutores_lista||[]).filter(ej=>ej.mail&&!(rec.ejecutores_lista||[]).find(x=>x.mail===ej.mail));
+    const esHoy = f.fechaInicioEsperado && f.fechaInicioEsperado<=new Date().toISOString().split("T")[0];
     if(f.ejecutorMail && f.ejecutorMail!==rec.ejecutorMail){
       const appUrl=window.location.href.split("?")[0];
       const catRespMails=(getCatCfg(rec.cat).responsables||[]).map(x=>x.mail);
@@ -588,15 +590,19 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
       await sendEmail({to:f.ejecutorMail,cc,
         subject:`[Club] Tarea asignada — ${rec.numero}: ${rec.sector}`,
   body:(()=>{
+        const isSameDay = f.fechaInicioEsperado && f.fechaCierre && f.fechaInicioEsperado===f.fechaCierre;
         const startDate = (f.fechaInicioEsperado||new Date().toISOString().split("T")[0]).replace(/-/g,"");
+        const startTime = (isSameDay && f.horaInicio) ? "T"+f.horaInicio.replace(":","")+"00" : "";
+        const endTime = (isSameDay && f.horaFin) ? "T"+f.horaFin.replace(":","")+"00" : "";
         const endDate = (f.fechaCierre||f.fechaInicioEsperado||new Date().toISOString().split("T")[0]).replace(/-/g,"");
         const calTitle = encodeURIComponent(`🔧 ${rec.sector} — ${rec.numero}`);
         const calDesc = encodeURIComponent(`Tarea: ${cat?.label} › ${rec.sub}\nDescripción: ${rec.desc}\nNúmero: ${rec.numero}\nConfirmar resolución: ${appUrl}?completar=${rec.id}`);
-        const calLink = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${calTitle}&dates=${startDate}/${endDate}&details=${calDesc}`;
+        const calLink = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${calTitle}&dates=${startDate}${startTime}/${endDate}${endTime}&details=${calDesc}`;
         const calReminderTitle = encodeURIComponent(`✅ Confirmar resolución — ${rec.numero}`);
         const calReminderDesc = encodeURIComponent(`Confirmar que la tarea ${rec.numero} fue completada:\n${appUrl}?completar=${rec.id}`);
         const calReminderLink = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${calReminderTitle}&dates=${endDate}/${endDate}&details=${calReminderDesc}`;
-        return `Hola ${f.ejecutorNombre},\n\nSe te asignó la siguiente tarea:\n\nNúmero: ${rec.numero}\nSector: ${rec.sector}\nProblema: ${cat?.label} › ${rec.sub}\nDescripción: ${rec.desc}\nFecha inicio: ${fd(f.fechaInicioEsperado||"")}\nFecha cierre: ${fd(f.fechaCierre)}\n\n✅ CONFIRMAR:\n${appUrl}?confirmar=${rec.id}\n\n❌ RECHAZAR:\n${appUrl}?rechazar=${rec.id}\n\n📅 AGREGAR AL CALENDARIO:\nEvento de tarea: ${calLink}\nRecordatorio de cierre: ${calReminderLink}\n\nSi no respondés en 24hs el sistema notificará al responsable.`;
+        const ejNombres = (f.ejecutores_lista||[]).length > 1 ? (f.ejecutores_lista||[]).map(e=>e.nombre).join(" y ") : f.ejecutorNombre;
+        return `Hola ${ejNombres},\n\nSe te asignó la siguiente tarea:\n\nNúmero: ${rec.numero}\nSector: ${rec.sector}\nProblema: ${cat?.label} › ${rec.sub}\nDescripción: ${rec.desc}\nFecha inicio: ${fd(f.fechaInicioEsperado||"")}\nFecha cierre: ${fd(f.fechaCierre)}\n\n✅ CONFIRMAR:\n${appUrl}?confirmar=${rec.id}\n\n❌ RECHAZAR:\n${appUrl}?rechazar=${rec.id}\n\n📅 AGREGAR AL CALENDARIO:\nEvento de tarea: ${calLink}\nRecordatorio de cierre: ${calReminderLink}\n\nSi no respondés en 24hs el sistema notificará al responsable.`;
       })()});
     }
     const fechaCierreConfirmada = f.fechaCierre ? f.fechaCierre : rec.fechaCierreConfirmada||null;
@@ -776,6 +782,14 @@ Resolución: ${descripcion||"—"}`});
                   h('div',null,h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Inicio esperado *"),h('input',{type:"date",value:f.fechaInicioEsperado,onChange:e=>set("fechaInicioEsperado",e.target.value),min:new Date().toISOString().split("T")[0],style:aS()})),
                   h('div',null,h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Cierre esperado *"),h('input',{type:"date",value:f.fechaCierre,onChange:e=>set("fechaCierre",e.target.value),min:f.fechaInicioEsperado||new Date().toISOString().split("T")[0],style:aS()}))),
           f.fechaInicioEsperado && f.fechaCierre && (new Date(f.fechaCierre)-new Date(f.fechaInicioEsperado))/86400000 > 30 && h('div',{style:{background:"#fff7ed",border:"1.5px solid #fed7aa",borderRadius:8,padding:"8px 12px",marginBottom:8,fontSize:12,color:"#92400e"}},"⚠️ Esta tarea tiene más de 30 días de duración. Asegurate de que sea necesario."),
+          // Same-day: show time fields
+          f.fechaInicioEsperado && f.fechaCierre && f.fechaInicioEsperado===f.fechaCierre && h('div',{style:{background:"#f0fdf4",border:"1.5px solid #bbf7d0",borderRadius:10,padding:12,marginBottom:8}},
+            h('div',{style:{fontSize:12,fontWeight:600,color:"#15803d",marginBottom:8}},"🕐 Tarea de un día — podés especificar el horario"),
+            h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}},
+              h('div',null,h('label',{style:{display:"block",fontSize:10,fontWeight:600,color:"#374151",marginBottom:4,textTransform:"uppercase"}},"Hora inicio"),
+                h('input',{type:"time",value:f.horaInicio||"",onChange:e=>set("horaInicio",e.target.value),style:aS()})),
+              h('div',null,h('label',{style:{display:"block",fontSize:10,fontWeight:600,color:"#374151",marginBottom:4,textTransform:"uppercase"}},"Hora fin"),
+                h('input',{type:"time",value:f.horaFin||"",onChange:e=>set("horaFin",e.target.value),style:aS()})))),
           h('div',{style:{marginBottom:14}},h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Presupuesto ($)"),h('input',{value:f.presupuesto,onChange:e=>set("presupuesto",e.target.value),placeholder:"0",type:"number",style:aS()})),
           h('div',{style:{marginBottom:14}},h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Detalle del presupuesto"),h('textarea',{value:f.presupuestoDetalle,onChange:e=>set("presupuestoDetalle",e.target.value),rows:2,placeholder:"Conceptos...",style:{...aS(),resize:"vertical"}})),
           h('div',{style:{marginBottom:18}},h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Comentario interno"),h('textarea',{value:f.nuevoComentario,onChange:e=>set("nuevoComentario",e.target.value),rows:3,placeholder:"Novedad, observación o avance...",style:{...aS(),resize:"vertical"}}))),
@@ -790,22 +804,29 @@ Resolución: ${descripcion||"—"}`});
             ...[["interno","👷 Empleado del club"],["tercero","🏢 Proveedor externo"]].map(([tipo,lbl])=>
               h('button',{key:tipo,onClick:()=>{set("tipoEjecutor",tipo);if(tipo==="tercero"){set("ejecutorMail","tercero@externo");set("ejecutorNombre",f.empresaNombre||"");}else{set("ejecutorMail","");set("ejecutorNombre","");}},
                 style:{flex:1,padding:"8px",borderRadius:8,border:f.tipoEjecutor===tipo?"2px solid #3b82f6":"2px solid #e2e8f0",background:f.tipoEjecutor===tipo?"#eff6ff":"white",color:f.tipoEjecutor===tipo?"#1d4ed8":"#64748b",cursor:"pointer",fontSize:13,fontWeight:600}},lbl))),
-          f.tipoEjecutor==="tercero"
-            ? h('div',{style:{background:"#f8fafc",borderRadius:10,padding:12,marginBottom:14}},
-                h('div',{style:{marginBottom:10}},
-                  h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Empresa / Proveedor *"),
-                  h('input',{value:f.empresaNombre||"",onChange:e=>{set("empresaNombre",e.target.value);set("ejecutorNombre",e.target.value);},placeholder:"Nombre de la empresa",style:aS()})),
-                h('div',null,
-                  h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Teléfono / contacto"),
-                  h('input',{value:f.empresaTelefono||"",onChange:e=>set("empresaTelefono",e.target.value),placeholder:"Ej: 11-1234-5678",style:aS()})))
-            : h('div',{style:{marginBottom:16}},
-                h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:0.5}},"Seleccionar ejecutor"),
-                h('select',{value:f.ejecutorMail,onChange:e=>selectEj(e.target.value),style:aS()},
-                  h('option',{value:""},"— Seleccioná un ejecutor —"),
-                  ...ejecutores.map(e=>h('option',{key:e.mail,value:e.mail},e.nombre+" ("+e.mail+")")))),
-          f.ejecutorMail && f.tipoEjecutor!=="tercero" && h('div',{style:{background:"#f8fafc",borderRadius:10,padding:12,fontSize:13,marginBottom:14}},
-            h('div',{style:{fontWeight:600,color:"#1e293b"}},f.ejecutorNombre),
-            h('div',{style:{color:"#64748b"}},f.ejecutorMail)),
+          // Lista de ejecutores asignados
+          h('div',{style:{marginBottom:12}},
+            h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:0.5}},"Ejecutores asignados"),
+            h('div',{style:{display:"flex",flexDirection:"column",gap:6,marginBottom:8}},
+              ...(f.ejecutores_lista||[]).map((ej,i)=>h('div',{key:i,style:{display:"flex",alignItems:"center",gap:8,background:"#f8fafc",borderRadius:8,padding:"8px 12px",fontSize:13}},
+                h('div',{style:{flex:1}},
+                  h('div',{style:{fontWeight:600,color:"#1e293b"}},ej.nombre),
+                  h('div',{style:{fontSize:12,color:"#64748b"}},ej.mail||ej.telefono||"")),
+                h('button',{onClick:()=>{const l=[...(f.ejecutores_lista||[])];l.splice(i,1);set("ejecutores_lista",l);if(l.length===0){set("ejecutorMail","");set("ejecutorNombre","");}else{set("ejecutorMail",l[0].mail||"tercero");set("ejecutorNombre",l.map(e=>e.nombre).join(", "));}},style:{background:"none",border:"none",cursor:"pointer",color:"#ef4444",fontSize:14}},"✕")))),
+            // Add executor
+            h('div',{style:{display:"flex",gap:6,marginBottom:8}},
+              ...[["interno","👷 Empleado"],["tercero","🏢 Proveedor"]].map(([tipo,lbl])=>
+                h('button',{key:tipo,onClick:()=>set("tipoEjecutor",tipo),
+                  style:{flex:1,padding:"6px",borderRadius:8,border:f.tipoEjecutor===tipo?"2px solid #3b82f6":"2px solid #e2e8f0",background:f.tipoEjecutor===tipo?"#eff6ff":"white",color:f.tipoEjecutor===tipo?"#1d4ed8":"#64748b",cursor:"pointer",fontSize:12,fontWeight:600}},lbl))),
+            f.tipoEjecutor==="interno"
+              ? h('div',{style:{display:"flex",gap:6}},
+                  h('select',{value:"",onChange:e=>{if(!e.target.value)return;const ej=ejecutores.find(x=>x.mail===e.target.value);if(ej&&!(f.ejecutores_lista||[]).find(x=>x.mail===ej.mail)){const l=[...(f.ejecutores_lista||[]),ej];set("ejecutores_lista",l);set("ejecutorMail",l[0].mail);set("ejecutorNombre",l.map(x=>x.nombre).join(", "));}e.target.value="";},style:{...aS(),flex:1}},
+                    h('option',{value:""},"+ Agregar ejecutor..."),
+                    ...ejecutores.map(e=>h('option',{key:e.mail,value:e.mail},e.nombre))))
+              : h('div',{style:{display:"flex",flexDirection:"column",gap:6}},
+                  h('input',{value:f.empresaNombre||"",onChange:e=>{set("empresaNombre",e.target.value);},placeholder:"Nombre empresa/proveedor",style:aS()}),
+                  h('input',{value:f.empresaTelefono||"",onChange:e=>set("empresaTelefono",e.target.value),placeholder:"Teléfono/contacto",style:aS()}),
+                  h('button',{onClick:()=>{if(!f.empresaNombre.trim())return;const ej={nombre:f.empresaNombre,mail:"",telefono:f.empresaTelefono};const l=[...(f.ejecutores_lista||[]),ej];set("ejecutores_lista",l);set("ejecutorMail","tercero");set("ejecutorNombre",l.map(x=>x.nombre).join(", "));set("empresaNombre","");set("empresaTelefono","");},style:{padding:"7px 14px",background:"#0f172a",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600}},"+ Agregar")))),
           !rec.ejecutorRechazado && rec.ejecutorConfirmado && h('div',{style:{background:"#f0fdf4",border:"1.5px solid #bbf7d0",borderRadius:10,padding:12,fontSize:13,color:"#15803d",fontWeight:600,marginBottom:12}},"✅ Confirmó el "+fdt(rec.fechaConfirmacion)),
           // Consolidación
           h('div',{style:{marginTop:12,background:"#f8fafc",borderRadius:10,padding:12}},
@@ -878,7 +899,7 @@ Resolución: ${descripcion||"—"}`});
         saveErr && h('div',{style:{background:"#fef2f2",border:"1.5px solid #fecaca",borderRadius:8,padding:"10px 14px",marginBottom:10,fontSize:13,color:"#dc2626"}},saveErr),
         h('div',{style:{display:"flex",gap:10,marginTop:4}},
           h('button',{onClick:onClose,style:{flex:1,padding:"12px",background:"#f1f5f9",color:"#64748b",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:600}},"Cancelar"),
-          h('button',{onClick:save,disabled:sending,style:{flex:2,padding:"12px",background:sending?"#94a3b8":"linear-gradient(135deg,#0f172a,#1e3a5f)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700}},sending?"Guardando...":"Guardar ✓"))));
+          h('button',{onClick:save,disabled:sending,style:{flex:2,padding:"12px",background:sending?"#94a3b8":"linear-gradient(135deg,#0f172a,#1e3a5f)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700}},sending?"Guardando...":"Guardar ✓")));
 }
 
 // ── PANEL CONFIG ───────────────────────────────────────────────────────────
@@ -1285,7 +1306,7 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
     if(s==="sector") return (a.sector||"").localeCompare(b.sector||"")||new Date(a.createdAt)-new Date(b.createdAt);
     if(s==="numero") return (a.numero||"").localeCompare(b.numero||"");
     if(s==="fecha") return new Date(b.createdAt)-new Date(a.createdAt);
-    if(s==="criticidad"){const ord=["mega_urgente","urgente","alta","media","baja"];return ord.indexOf(a.criticidad||a.pri)-ord.indexOf(b.criticidad||b.pri);}
+    if(s==="criticidad"){const ord=["urgente","alta","media","baja"];return ord.indexOf(a.criticidad||a.pri)-ord.indexOf(b.criticidad||b.pri);}
     return 0;
   });
 
@@ -1422,7 +1443,7 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
     // Lista
     mainTab==="reclamos" && view==="lista" && h('div',{style:{padding:"0 24px 24px",overflowX:"auto"}},
       h('table',{style:{width:"100%",borderCollapse:"separate",borderSpacing:"0 5px"}},
-        h('thead',null,h('tr',null,...["Nº","Fecha","Sector","Tipo","Detalle","Criticidad socio→int","Estado","Ejecutor","Status","Cierre","Timing",""].map(hd=>
+        h('thead',null,h('tr',null,...["Nº","Fecha","Sector","Tipo","Detalle","Criticidad","Estado","Ejecutor","Acción","Cierre",""].map(hd=>
           h('th',{key:hd,style:{textAlign:"left",padding:"8px 10px",fontSize:11,color:"#94a3b8",fontWeight:600,letterSpacing:0.5,textTransform:"uppercase"}},hd)))),
         h('tbody',null,
           !filtrados.length && h('tr',null,h('td',{colSpan:12,style:{textAlign:"center",padding:40,color:"#94a3b8"}},"No hay reclamos")),
@@ -1438,28 +1459,18 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
               h('td',{style:{padding:"11px 10px",fontSize:12,fontWeight:500,maxWidth:100}},r.sector),
               h('td',{style:{padding:"11px 10px",fontSize:13}},cat?.icon),
               h('td',{style:{padding:"11px 10px",fontSize:11,color:"#64748b",maxWidth:130,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},r.sub),
-              h('td',{style:{padding:"11px 10px"}},
-                (() => {
-                  const socio = PRIS.find(p=>p.id===r.pri);
-                  const intel = PRIS.find(p=>p.id===r.criticidad);
-                  if(!intel) return h(Badge,{color:socio?.color,label:socio?.label,sm:true});
-                  if(socio?.id===intel?.id) return h(Badge,{color:intel.color,label:intel.label,sm:true});
-                  const arrow = PRIS.indexOf(intel) < PRIS.indexOf(socio) ? "↑" : "↓";
-                  const arrowColor = arrow==="↑"?"#ef4444":"#22c55e";
-                  return h('div',{style:{display:"flex",alignItems:"center",gap:4}},
-                    h('span',{style:{fontSize:10,color:"#94a3b8"},title:"Criticidad del socio"},socio?.label),
-                    h('span',{style:{color:arrowColor,fontWeight:700,fontSize:12}},arrow),
-                    h(Badge,{color:intel.color,label:intel.label,sm:true}));
-                })()),
+              h('td',{style:{padding:"11px 10px"}},h(Badge,{color:crit?.color,label:crit?.label,sm:true})),
               h('td',{style:{padding:"11px 10px"}},h(Badge,{color:est?.color,label:est?.label,sm:true})),
-              h('td',{style:{padding:"11px 10px",fontSize:11,color:"#64748b"}},r.ejecutorNombre||"—"),
-              h('td',{style:{padding:"11px 10px"}},
-                r.ejecutorRechazado ? h(Badge,{color:"#dc2626",bg:"#fef2f2",label:"❌ Rechazada — acción requerida",sm:true})
-                : r.ejecutorConfirmado ? h(Badge,{color:"#15803d",bg:"#f0fdf4",label:"✅ Confirmada",sm:true})
-                : r.ejecutorMail ? h(Badge,{color:"#1d4ed8",bg:"#eff6ff",label:"⏳ Esp. confirmación",sm:true})
-                : h('span',{style:{color:"#cbd5e1",fontSize:11}},"—")),
+              h('td',{style:{padding:"11px 10px",fontSize:11,color:"#64748b"}},
+                r.ejecutorRechazado ? h('span',{style:{color:"#dc2626",fontWeight:600,fontSize:11}},"❌ Rechazada")
+                : r.ejecutorNombre ? h('span',null,r.ejecutorNombre+(r.ejecutorConfirmado?" ✅":" ⏳"))
+                : h('span',{style:{color:"#cbd5e1"}},"—")),
+              h('td',{style:{padding:"11px 10px"}},(() => {
+                const acc = getAccionRequerida(r);
+                if(!acc) return h('span',{style:{color:"#cbd5e1",fontSize:11}},"—");
+                return h('span',{style:{display:"inline-block",padding:"3px 8px",borderRadius:6,fontSize:11,fontWeight:700,color:acc.color,background:acc.bg,whiteSpace:"nowrap"}},acc.label);
+              })()),
               h('td',{style:{padding:"11px 10px",fontSize:11,color:"#64748b",whiteSpace:"nowrap"}},fd(r.fechaCierre)),
-              h('td',{style:{padding:"11px 10px"}},t?h(Badge,{color:t.color,bg:t.bg,label:t.label,sm:true}):h('span',{style:{color:"#cbd5e1",fontSize:11}},"—")),
               h('td',{style:{padding:"11px 10px",borderRadius:"0 10px 10px 0"}},
                 h('button',{onClick:()=>setModal(r),style:{padding:"5px 12px",background:"#0f172a",color:"white",border:"none",borderRadius:7,cursor:"pointer",fontSize:12,fontWeight:600}},"Gestionar")));
           })))),
