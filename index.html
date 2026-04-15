@@ -410,12 +410,12 @@ function FormularioSocio({onSubmit, reclamos}) {
     const appUrl = window.location.href.split("?")[0];
     const seguimientoUrl = appUrl+"?seguimiento="+n;
     // Email a intendencia
-    await sendEmail({to:NOTIFY_EMAIL, subject:`[Club] Nuevo reclamo ${n} — ${f.sector}`,
+    await sendEmail({to:NOTIFY_EMAIL, subject:`[Asturiano] Nuevo reclamo ${n} — ${f.sector}`,
       body:`Nuevo reclamo registrado.\n\nNúmero: ${n}\nSolicitante: ${f.tipo} — ${f.nombre}\nCelular: ${f.celular||"—"}\nEmail: ${f.email||"—"}\nSector: ${f.sector}${f.ubicacion?`\nUbicación exacta: ${f.ubicacion}`:""}\nTipo: ${catConf?.label} › ${f.sub}\nPrioridad: ${pri?.label}\nDescripción: ${f.desc}`});
     // Email de confirmación al usuario
     if(f.email) {
-      await sendEmail({to:f.email, subject:`[Club] Recibimos tu reclamo — ${n}`,
-        body:`Hola ${f.nombre},\n\nRecibimos tu reclamo y ya está siendo procesado por el equipo de intendencia.\n\nNúmero de reclamo: ${n}\nSector: ${f.sector}\nProblema: ${catConf?.label} › ${f.sub}\nDescripción: ${f.desc}\n\nPodés seguir el estado de tu reclamo en cualquier momento acá:\n${seguimientoUrl}\n\nTe notificaremos cuando haya novedades.\n\n— Equipo de Intendencia`});
+      await sendEmail({to:f.email, subject:`[Asturiano] Recibimos tu reclamo — ${n}`,
+        body:`Hola ${f.nombre},\n\nRecibimos tu reclamo y ya está siendo procesado por el equipo de intendencia.\n\nNúmero de reclamo: ${n}\nSector: ${f.sector}\nProblema: ${catConf?.label} › ${f.sub}\nDescripción: ${f.desc}\n\nPodés seguir el estado de tu reclamo en cualquier momento acá:\n${seguimientoUrl}\n\nTe notificaremos cuando haya novedades.\n\n— Equipo de Intendencia Asturiano`});
     }
     setSending(false); setDone(true);
   };
@@ -609,7 +609,7 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
       const catRespMails=(getCatCfg(rec.cat).responsables||[]).map(x=>x.mail);
     const cc=[...catRespMails].filter(e=>e&&e!==f.ejecutorMail);
       await sendEmail({to:f.ejecutorMail,cc,
-        subject:`[Club] Tarea asignada — ${rec.numero}: ${rec.sector}`,
+        subject:`[Asturiano] Tarea asignada — ${rec.numero}: ${rec.sector}`,
   body:(()=>{
         const isSameDay = f.fechaInicioEsperado && f.fechaCierre && f.fechaInicioEsperado===f.fechaCierre;
         const startDate = (f.fechaInicioEsperado||new Date().toISOString().split("T")[0]).replace(/-/g,"");
@@ -654,7 +654,7 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
       const respMail = getResponsableMail(savedRec.cat);
       if(dirMails.length) {
         await sendEmail({to:dirMails, cc:[respMail].filter(Boolean),
-          subject:`[Club] 🔵 Tarea completada — pendiente validación — ${savedRec.numero}`,
+          subject:`[Asturiano] 🔵 Tarea completada — pendiente validación — ${savedRec.numero}`,
           body:`La tarea ${savedRec.numero} fue marcada como completada y requiere tu validación.\n\nSector: ${savedRec.sector}\nEjecutor: ${savedRec.ejecutorNombre||"—"}\nResolución: ${savedRec.descripcionResolucion||"—"}\n\nAprobar: ${window.location.href.split("?")[0]}?validar=${savedRec.id}\nRechazar: ${window.location.href.split("?")[0]}?rechazar_validacion=${savedRec.id}`});
       }
     }
@@ -683,14 +683,14 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
       : "";
     if(savedRec.email) {
       await sendEmail({to:savedRec.email,
-        subject:`[Club] ✅ Tu reclamo fue resuelto — ${savedRec.numero}`,
-        body:`Hola ${savedRec.nombre},\n\nNos alegra informarte que el problema que reportaste en ${savedRec.sector} fue resuelto. ${msgCat}.\n\n${descripcion?"Lo que se hizo:\n"+descripcion+"\n\n":""}${fotosMensaje?fotosMensaje+"\n\n":""}Podés calificar la resolución haciendo clic acá:\n${calificarUrl}\n\nGracias por ayudarnos a mejorar el club.\n\n— Equipo de Intendencia`});
+        subject:`[Asturiano] ✅ Tu reclamo fue resuelto — ${savedRec.numero}`,
+        body:`Hola ${savedRec.nombre},\n\nNos alegra informarte que el problema que reportaste en ${savedRec.sector} fue resuelto. ${msgCat}.\n\n${descripcion?"Lo que se hizo:\n"+descripcion+"\n\n":""}${fotosMensaje?fotosMensaje+"\n\n":""}Podés calificar la resolución haciendo clic acá:\n${calificarUrl}\n\nGracias por ayudarnos a mejorar el club.\n\n— Equipo de Intendencia Asturiano`});
     }
     // Notify directivos and responsable
     const dirMails = getDirectivos(savedRec.cat).map(d=>d.mail);
     const respMail = getResponsableMail(savedRec.cat);
     await sendEmail({to:[respMail,...dirMails].filter(Boolean),
-      subject:`[Club] ✅ Tarea completada — ${savedRec.numero}: ${savedRec.sector}`,
+      subject:`[Asturiano] ✅ Tarea completada — ${savedRec.numero}: ${savedRec.sector}`,
       body:`La tarea ${savedRec.numero} fue marcada como completada.
 
 Sector: ${savedRec.sector}
@@ -704,7 +704,7 @@ Resolución: ${descripcion||"—"}`});
     const _respM=getResponsableMail(rec.cat);
     const _dirMs=getDirectivos(rec.cat).map(d=>d.mail);
     await sendEmail({to:[_respM,..._dirMs].filter(Boolean),
-      subject:`[Club] ✅ Tarea completada — ${rec.numero}: ${rec.sector}`,
+      subject:`[Asturiano] ✅ Tarea completada — ${rec.numero}: ${rec.sector}`,
       body:`Tarea completada.\n\nNúmero: ${rec.numero}\nSector: ${rec.sector}\nEjecutor: ${rec.ejecutorNombre||"—"}\nDescripción: ${f.descripcionResolucion||"—"}\nCosto: ${f.presupuesto?"$"+Number(f.presupuesto).toLocaleString("es-AR"):"—"}\n${f.evidenciaUrl?"Evidencia: "+f.evidenciaUrl:""}`});
     setSending(false); alert("✅ Notificación enviada.");
   };
@@ -785,8 +785,8 @@ Resolución: ${descripcion||"—"}`});
                     };
                     await onSave(updated);
                     if(rec.email) await sendEmail({to:rec.email,
-                      subject:`[Club] Tu reclamo fue consolidado — ${rec.numero}`,
-                      body:`Hola ${rec.nombre},\n\nTu reclamo ${rec.numero} fue consolidado con otro reclamo previo sobre el mismo problema en ${rec.sector}.\n\nAmbos serán resueltos juntos. La fecha estimada de resolución es ${fd(existing?.fechaCierreConfirmada||existing?.fechaCierre)}.\n\n— Equipo de Intendencia`});
+                      subject:`[Asturiano] Tu reclamo fue consolidado — ${rec.numero}`,
+                      body:`Hola ${rec.nombre},\n\nTu reclamo ${rec.numero} fue consolidado con otro reclamo previo sobre el mismo problema en ${rec.sector}.\n\nAmbos serán resueltos juntos. La fecha estimada de resolución es ${fd(existing?.fechaCierreConfirmada||existing?.fechaCierre)}.\n\n— Equipo de Intendencia Asturiano`});
                   },
                   style:{padding:"4px 12px",background:"#854d0e",color:"white",border:"none",borderRadius:6,cursor:"pointer",fontSize:11,fontWeight:600}},"✅ Sí, consolidar"),
                 h('button',{onClick:()=>{
@@ -1150,8 +1150,8 @@ function ModalProyecto({proyecto, onClose, onSave, ejecutores, recs}) {
         const rec=recs.find(r=>r.numero===num);
         if(rec?.email){
           await sendEmail({to:rec.email,
-            subject:`[Club] ✅ Proyecto completado — tu reclamo fue resuelto`,
-            body:`Hola ${rec.nombre},\n\nEl proyecto "${f.titulo}" al que estaba vinculado tu reclamo ${rec.numero} (${rec.sector}) fue completado.\n\nTu problema ha sido resuelto. Te invitamos a calificar la resolución:\n${appUrl}?calificar=${rec.id}\n\n— Equipo de Intendencia`});
+            subject:`[Asturiano] ✅ Proyecto completado — tu reclamo fue resuelto`,
+            body:`Hola ${rec.nombre},\n\nEl proyecto "${f.titulo}" al que estaba vinculado tu reclamo ${rec.numero} (${rec.sector}) fue completado.\n\nTu problema ha sido resuelto. Te invitamos a calificar la resolución:\n${appUrl}?calificar=${rec.id}\n\n— Equipo de Intendencia Asturiano`});
         }
       }
     }
@@ -1410,9 +1410,9 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
       if (!r.ejecutorMail || !r.fechaInicioOriginal) {
         if (diasCreado >= plazos.directivo) {
           const dest=[...dirMails,...respMails].filter(Boolean);
-          if(dest.length){ await sendEmail({to:dest, subject:`[Club] 🚨 Reclamo sin asignar — ${r.numero}`, body:`El reclamo ${r.numero} lleva ${formatTiempoJS(diasCreado)} sin ejecutor ni fechas.\n\nSector: ${r.sector}\nDescripción: ${r.desc}\nCriticidad: ${crit}\n\n${appUrl}`}); enviados++; }
+          if(dest.length){ await sendEmail({to:dest, subject:`[Asturiano] 🚨 Reclamo sin asignar — ${r.numero}`, body:`El reclamo ${r.numero} lleva ${formatTiempoJS(diasCreado)} sin ejecutor ni fechas.\n\nSector: ${r.sector}\nDescripción: ${r.desc}\nCriticidad: ${crit}\n\n${appUrl}`}); enviados++; }
         } else if (diasCreado >= plazos.recordatorio) {
-          if(respMails.length){ await sendEmail({to:respMails, subject:`[Club] ⏰ Reclamo pendiente de asignación — ${r.numero}`, body:`El reclamo ${r.numero} no tiene ejecutor ni fechas asignadas.\n\nSector: ${r.sector}\nDescripción: ${r.desc}\n\nIngresá al panel:\n${appUrl}`}); enviados++; }
+          if(respMails.length){ await sendEmail({to:respMails, subject:`[Asturiano] ⏰ Reclamo pendiente de asignación — ${r.numero}`, body:`El reclamo ${r.numero} no tiene ejecutor ni fechas asignadas.\n\nSector: ${r.sector}\nDescripción: ${r.desc}\n\nIngresá al panel:\n${appUrl}`}); enviados++; }
         }
         continue;
       }
@@ -1422,10 +1422,10 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
         const diasAsig = r.fechaAsignacion ? diasDesdeRec(r.fechaAsignacion) : diasCreado;
         if (diasAsig >= plazos.directivo) {
           const dest=[...dirMails,...respMails].filter(Boolean);
-          if(dest.length){ await sendEmail({to:dest, subject:`[Club] 🚨 Ejecutor no confirmó — ${r.numero}`, body:`El ejecutor ${r.ejecutorNombre} no confirmó la tarea ${r.numero} hace ${formatTiempoJS(diasAsig)}.\n\nSector: ${r.sector}\n\nSe requiere reasignación.\n\n${appUrl}`}); enviados++; }
+          if(dest.length){ await sendEmail({to:dest, subject:`[Asturiano] 🚨 Ejecutor no confirmó — ${r.numero}`, body:`El ejecutor ${r.ejecutorNombre} no confirmó la tarea ${r.numero} hace ${formatTiempoJS(diasAsig)}.\n\nSector: ${r.sector}\n\nSe requiere reasignación.\n\n${appUrl}`}); enviados++; }
         } else if (diasAsig >= plazos.recordatorio) {
           const dest=[r.ejecutorMail,...respMails].filter(Boolean);
-          if(dest.length){ await sendEmail({to:dest, subject:`[Club] ⏰ Confirmación pendiente — ${r.numero}`, body:`Recordatorio: ${r.ejecutorNombre}, por favor confirmá o rechazá la tarea ${r.numero}.\n\nConfirmar: ${appUrl}?confirmar=${r.id}\nRechazar: ${appUrl}?rechazar=${r.id}`}); enviados++; }
+          if(dest.length){ await sendEmail({to:dest, subject:`[Asturiano] ⏰ Confirmación pendiente — ${r.numero}`, body:`Recordatorio: ${r.ejecutorNombre}, por favor confirmá o rechazá la tarea ${r.numero}.\n\nConfirmar: ${appUrl}?confirmar=${r.id}\nRechazar: ${appUrl}?rechazar=${r.id}`}); enviados++; }
         }
       }
 
@@ -1436,14 +1436,14 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
         await sbUpsert(updated);
         actualizados=actualizados.map(x=>x.id===r.id?updated:x);
         const dest=[...dirMails,...respMails].filter(Boolean);
-        if(dest.length){ await sendEmail({to:dest, subject:`[Club] 🔴 Tarea demorada — ${r.numero}`, body:`La tarea ${r.numero} excedió su fecha de cierre.\n\nSector: ${r.sector}\nEjecutor: ${r.ejecutorNombre||"—"}\nFecha cierre: ${fd(fechaCierre)}\n\n${appUrl}`}); enviados++; }
+        if(dest.length){ await sendEmail({to:dest, subject:`[Asturiano] 🔴 Tarea demorada — ${r.numero}`, body:`La tarea ${r.numero} excedió su fecha de cierre.\n\nSector: ${r.sector}\nEjecutor: ${r.ejecutorNombre||"—"}\nFecha cierre: ${fd(fechaCierre)}\n\n${appUrl}`}); enviados++; }
       }
 
       // CASO 4: Recordatorio al ejecutor cuando llega fecha inicio
       const fechaInicio = r.fechaInicioActualizada || r.fechaInicioEsperado;
       if(r.ejecutorConfirmado && r.ejecutorMail && fechaInicio &&
          !diasOverride && new Date(fechaInicio)<=ahora && r.estadoAvance==="bajo_analisis"){
-        await sendEmail({to:[r.ejecutorMail], subject:`[Club] 📋 Tu tarea empieza hoy — ${r.numero}`, body:`Hola ${r.ejecutorNombre},\n\nLa tarea ${r.numero} debería iniciarse hoy.\n\nSector: ${r.sector}\nDescripción: ${r.desc}\n\nCuando termines confirmá la resolución:\n${appUrl}?completar=${r.id}`});
+        await sendEmail({to:[r.ejecutorMail], subject:`[Asturiano] 📋 Tu tarea empieza hoy — ${r.numero}`, body:`Hola ${r.ejecutorNombre},\n\nLa tarea ${r.numero} debería iniciarse hoy.\n\nSector: ${r.sector}\nDescripción: ${r.desc}\n\nCuando termines confirmá la resolución:\n${appUrl}?completar=${r.id}`});
         enviados++;
       }
     }
@@ -1464,8 +1464,8 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
     // Header
     h('div',{style:{background:"#0f172a",padding:"14px 24px",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10}},
       h('div',null,
-        h('div',{style:{fontSize:11,color:"#60a5fa",letterSpacing:2,textTransform:"uppercase"}},"Panel de Gestión"),
-        h('h1',{style:{fontFamily:"'Playfair Display',serif",color:"white",fontSize:22,margin:0}},"Intendencia del Club")),
+        h('div',{style:{fontSize:11,color:"#60a5fa",letterSpacing:2,textTransform:"uppercase"}},"Panel de Gestión — Asturiano"),
+        h('h1',{style:{fontFamily:"'Playfair Display',serif",color:"white",fontSize:22,margin:0}},"Intendencia — Asturiano")),
       h('div',{style:{display:"flex",gap:8}},
         h('button',{onClick:()=>setShowCfg(true),style:{padding:"8px 14px",background:"rgba(255,255,255,0.1)",color:"white",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600}},"⚙️ Configuración"),
 
@@ -1549,7 +1549,7 @@ function Login({onLogin}) {
   return h('div',{style:{minHeight:"100vh",background:"#0f172a",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
     h('div',{style:{background:"white",borderRadius:20,padding:36,maxWidth:380,width:"100%",textAlign:"center"}},
       h('div',{style:{fontSize:40,marginBottom:12}},"🏛️"),
-      h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:22,margin:"0 0 6px"}},"Panel de Gestión"),
+      h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:22,margin:"0 0 6px"}},"Panel de Gestión — Asturiano"),
       h('p',{style:{color:"#64748b",fontSize:14,marginBottom:24}},"Ingresá la contraseña para acceder"),
       h('input',{type:"password",value:p,onChange:e=>setP(e.target.value),onKeyDown:e=>e.key==="Enter"&&go(),placeholder:"Contraseña",
         style:{width:"100%",padding:"12px 14px",borderRadius:10,border:err?"2px solid #ef4444":"2px solid #e2e8f0",fontSize:15,outline:"none",marginBottom:12,boxSizing:"border-box"}}),
@@ -1592,11 +1592,11 @@ function CompletarView({recId, recs, setRecs, loaded}) {
       comentarios:[...(rec.comentarios||[]),{texto:`Ejecutor marcó como completada. Resolución: ${desc}`,fecha:new Date().toISOString(),autor:rec.ejecutorNombre||"Ejecutor"}]};
     await sbUpsert(updated);
     setRecs(prev=>prev.map(r=>r.id===rec.id?updated:r));
-    if(rec.email) await sendEmail({to:rec.email,subject:`[Club] ✅ Tu reclamo fue resuelto — ${rec.numero}`,
-      body:`Hola ${rec.nombre},\n\nNos alegra informarte que el problema que reportaste en ${rec.sector} fue resuelto. ${msgCat}.\n\nLo que se hizo:\n${desc}\n\nCuando tengas un momento, evaluá si el problema quedó resuelto y calificá la atención. En caso de no estar conforme podés reabrir el ticket:\n${calificarUrl}\n\nGracias por ayudarnos a mejorar el club.\n\n— Equipo de Intendencia`});
+    if(rec.email) await sendEmail({to:rec.email,subject:`[Asturiano] ✅ Tu reclamo fue resuelto — ${rec.numero}`,
+      body:`Hola ${rec.nombre},\n\nNos alegra informarte que el problema que reportaste en ${rec.sector} fue resuelto. ${msgCat}.\n\nLo que se hizo:\n${desc}\n\nCuando tengas un momento, evaluá si el problema quedó resuelto y calificá la atención. En caso de no estar conforme podés reabrir el ticket:\n${calificarUrl}\n\nGracias por ayudarnos a mejorar el club.\n\n— Equipo de Intendencia Asturiano`});
     const dirMails=getDirectivos(rec.cat).map(d=>d.mail);
     const respMail=getResponsableMail(rec.cat);
-    await sendEmail({to:[respMail,...dirMails].filter(Boolean),subject:`[Club] ✅ Tarea completada por ejecutor — ${rec.numero}`,body:`${rec.ejecutorNombre||"El ejecutor"} marcó como completada la tarea ${rec.numero} (${rec.sector}).\n\nResolución: ${desc}`});
+    await sendEmail({to:[respMail,...dirMails].filter(Boolean),subject:`[Asturiano] ✅ Tarea completada por ejecutor — ${rec.numero}`,body:`${rec.ejecutorNombre||"El ejecutor"} marcó como completada la tarea ${rec.numero} (${rec.sector}).\n\nResolución: ${desc}`});
     setSending(false);setDone(true);
   };
 
@@ -1655,7 +1655,7 @@ function RechazarValidacionView({recId, recs, setRecs, loaded}) {
     setRecs(prev=>prev.map(r=>r.id===rec.id?updated:r));
     const respMail = getResponsableMail(rec.cat);
     if(respMail) await sendEmail({to:respMail,
-      subject:`[Club] 🔄 Resolución rechazada por directivo — ${rec.numero}`,
+      subject:`[Asturiano] 🔄 Resolución rechazada por directivo — ${rec.numero}`,
       body:`El directivo rechazó la resolución del reclamo ${rec.numero} (${rec.sector}).
 
 Motivo: ${motivo}
@@ -1702,7 +1702,7 @@ function CalificarView({recId, recs, setRecs, loaded}) {
     setRecs(prev=>prev.map(r=>r.id===recId?updated:r));
     const respMail = getResponsableMail(rec.cat) || NOTIFY_EMAIL;
     await sendEmail({to:[respMail, mailCfg.directivo].filter(Boolean),
-      subject:`[Club] ⭐ Calificación ${stars}/5 — ${rec.numero}`,
+      subject:`[Asturiano] ⭐ Calificación ${stars}/5 — ${rec.numero}`,
       body:`El solicitante calificó con ${stars}⭐. Sector: ${rec.sector}. ${motivo?"Comentario: "+motivo+"\n":""}Solicitante: ${rec.nombre}`});
     setSending(false);
     setDone(true);
@@ -1837,7 +1837,7 @@ function App() {
           const _cf=getCatCfg(r.cat);
           const _cfDest=[...(_cf.responsables||[]).map(x=>x.mail),...(_cf.directivos||[]).map(x=>x.mail)].filter(Boolean);
           if(_cfDest.length) await sendEmail({to:_cfDest,
-            subject:`[Club] ✅ Ejecutor confirmó — ${r.numero}: ${r.sector}`,
+            subject:`[Asturiano] ✅ Ejecutor confirmó — ${r.numero}: ${r.sector}`,
             body:`${r.ejecutorNombre} confirmó que asume la tarea ${r.numero} (${r.sector}).`});
         }
         setView("confirm_ok");
@@ -1858,8 +1858,8 @@ function App() {
           const mensajes={infraestructura:"nuestro equipo de obras revisó y resolvió el inconveniente",mantenimiento:"nuestro equipo de mantenimiento preventivo atendió el problema",limpieza:"nuestro equipo de limpieza atendió la situación",preparacion:"el espacio fue preparado correctamente",servicios:"nuestro equipo de atención al socio gestionó tu consulta",cuotas:"nuestro equipo administrativo resolvió tu consulta"};
           const msgCat=mensajes[r.cat]||"nuestro equipo atendió y resolvió el inconveniente";
           if(r.email) await sendEmail({to:r.email,
-            subject:`[Club] ✅ Tu reclamo fue resuelto — ${r.numero}`,
-            body:`Hola ${r.nombre},\n\nNos alegra informarte que el problema que reportaste en ${r.sector} fue resuelto. ${msgCat}.\n\n${r.descripcionResolucion?"Lo que se hizo:\n"+r.descripcionResolucion+"\n\n":""}Cuando tengas un momento, evaluá si el reclamo ha sido resuelto correctamente y calificá la atención. En caso de no estar conforme podés reabrir el ticket:\n${appUrl}?calificar=${r.id}\n\nGracias por ayudarnos a mejorar el club.\n\n— Equipo de Intendencia`});
+            subject:`[Asturiano] ✅ Tu reclamo fue resuelto — ${r.numero}`,
+            body:`Hola ${r.nombre},\n\nNos alegra informarte que el problema que reportaste en ${r.sector} fue resuelto. ${msgCat}.\n\n${r.descripcionResolucion?"Lo que se hizo:\n"+r.descripcionResolucion+"\n\n":""}Cuando tengas un momento, evaluá si el reclamo ha sido resuelto correctamente y calificá la atención. En caso de no estar conforme podés reabrir el ticket:\n${appUrl}?calificar=${r.id}\n\nGracias por ayudarnos a mejorar el club.\n\n— Equipo de Intendencia Asturiano`});
         }
         setView("validar_ok");
       } else if(rechazarValId){
@@ -1881,7 +1881,7 @@ function App() {
           await sbUpsert(updated);
           // Notify responsable
           const respMail = getResponsableMail(r.cat);
-          if(respMail) await sendEmail({to:respMail,subject:`[Club] 🔄 Reclamo reabierto — ${r.numero}`,body:`El usuario reabrió el reclamo ${r.numero} (${r.sector}) porque no quedó conforme con la resolución.\n\nRequiere revisión inmediata.`});
+          if(respMail) await sendEmail({to:respMail,subject:`[Asturiano] 🔄 Reclamo reabierto — ${r.numero}`,body:`El usuario reabrió el reclamo ${r.numero} (${r.sector}) porque no quedó conforme con la resolución.\n\nRequiere revisión inmediata.`});
           setView("reabrir_ok");
         }
       }
@@ -1922,20 +1922,20 @@ function App() {
     // Notify user when linked to a project
     if(rec.email && prevRec && rec.proyectoVinculadoId && rec.proyectoVinculadoId!==prevRec.proyectoVinculadoId) {
       await sendEmail({to:rec.email,
-        subject:`[Club] Tu reclamo fue vinculado a un proyecto — ${rec.numero}`,
-        body:`Hola ${rec.nombre},\n\nTu reclamo ${rec.numero} (${rec.sector}) fue vinculado al proyecto "${rec.proyectoTitulo}".\n\nEsto significa que el problema que reportaste será resuelto como parte de una obra o proyecto mayor. Recibirás actualizaciones a medida que el proyecto avance.\n\nPodés seguir el estado de tu reclamo:\n${appUrl}?seguimiento=${rec.numero}\n\n— Equipo de Intendencia`});
+        subject:`[Asturiano] Tu reclamo fue vinculado a un proyecto — ${rec.numero}`,
+        body:`Hola ${rec.nombre},\n\nTu reclamo ${rec.numero} (${rec.sector}) fue vinculado al proyecto "${rec.proyectoTitulo}".\n\nEsto significa que el problema que reportaste será resuelto como parte de una obra o proyecto mayor. Recibirás actualizaciones a medida que el proyecto avance.\n\nPodés seguir el estado de tu reclamo:\n${appUrl}?seguimiento=${rec.numero}\n\n— Equipo de Intendencia Asturiano`});
     }
     // Notify user when fecha cierre confirmed changes
     if(rec.email && prevRec && rec.fechaCierreConfirmada && prevRec.fechaCierreConfirmada && rec.fechaCierreConfirmada!==prevRec.fechaCierreConfirmada) {
       await sendEmail({to:rec.email,
-        subject:`[Club] 📅 Actualización de fecha — ${rec.numero}`,
-        body:`Hola ${rec.nombre},\n\nTe informamos que la fecha estimada de resolución de tu reclamo ${rec.numero} (${rec.sector}) fue actualizada.\n\nNueva fecha estimada: ${fd(rec.fechaCierreConfirmada)}\n${rec.motivoActualizacion?"Motivo: "+rec.motivoActualizacion+"\n":""}\nPodés seguir el estado en:\n${appUrl}?seguimiento=${rec.numero}\n\n— Equipo de Intendencia`});
+        subject:`[Asturiano] 📅 Actualización de fecha — ${rec.numero}`,
+        body:`Hola ${rec.nombre},\n\nTe informamos que la fecha estimada de resolución de tu reclamo ${rec.numero} (${rec.sector}) fue actualizada.\n\nNueva fecha estimada: ${fd(rec.fechaCierreConfirmada)}\n${rec.motivoActualizacion?"Motivo: "+rec.motivoActualizacion+"\n":""}\nPodés seguir el estado en:\n${appUrl}?seguimiento=${rec.numero}\n\n— Equipo de Intendencia Asturiano`});
     }
     const seguimientoUrl = appUrl+"?seguimiento="+rec.numero;
     // Notificar al usuario cuando intendencia confirma fecha de resolución por primera vez
     if(rec.email && rec.fechaCierreConfirmada && prevRec && !prevRec.fechaCierreConfirmada){
       await sendEmail({to:rec.email,
-        subject:`[Club] Tu reclamo está siendo atendido — ${rec.numero}`,
+        subject:`[Asturiano] Tu reclamo está siendo atendido — ${rec.numero}`,
         body:`Hola ${rec.nombre},
 
 Tu reclamo fue asignado y está siendo atendido por nuestro equipo.
@@ -1949,7 +1949,7 @@ ${seguimientoUrl}
 
 Te avisaremos cuando esté resuelto.
 
-— Equipo de Intendencia`});
+— Equipo de Intendencia Asturiano`});
     }
     // Resolution email is handled by notifResolucionAuto in EditModal save
   };
@@ -1968,7 +1968,7 @@ Te avisaremos cuando esté resuelto.
     const _rj=getCatCfg(rec.cat);
     const _rjDest=[...(_rj.responsables||[]).map(x=>x.mail),...(_rj.directivos||[]).map(x=>x.mail)].filter(Boolean);
     await sendEmail({to:_rjDest,
-      subject:`[Club] ❌ Ejecutor rechazó — ${rec.numero}: ${rec.sector}`,
+      subject:`[Asturiano] ❌ Ejecutor rechazó — ${rec.numero}: ${rec.sector}`,
       body:`${rec.ejecutorNombre} rechazó la tarea ${rec.numero} (${rec.sector}).\n\nMotivo: ${motivo}\n\nDebés reasignar esta tarea.`});
     setView("rechazar_ok");
   };
@@ -2086,6 +2086,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
+
 
 
 
