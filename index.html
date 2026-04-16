@@ -684,7 +684,28 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
       const uploaded = await uploadAdjuntos(adjuntosResolucion, rec.id, "resolucion");
       adjuntosResolucion = uploaded;
     }
+    // Auto-calculate estado based on dates and assignment
+    const calcEstado = () => {
+      // Don't auto-change if already in terminal/special states
+      if(["completada","consolidada","esperando_validacion","vinculado_proyecto","sin_resolucion"].includes(f.estadoAvance)) return f.estadoAvance;
+      const ahora = new Date();
+      const fechaInicio = new Date(f.fechaInicioEsperado||f.fechaInicioActualizada||"");
+      const fechaCierreEfectiva = new Date(f.fechaCierreActualizada||f.fechaCierre||"");
+      // No executor assigned yet
+      if(!f.ejecutorMail || f.ejecutorMail.includes("externo")) return "bajo_analisis";
+      // Has executor but no dates
+      if(!f.fechaInicioEsperado && !f.fechaCierre) return "sin_resolucion";
+      // Overdue
+      if(f.fechaCierre && fechaCierreEfectiva < ahora) return "demorada";
+      // In progress (start date passed, not yet done)
+      if(f.fechaInicioEsperado && fechaInicio <= ahora) return "iniciada";
+      // Planned (start date in future)
+      if(f.fechaInicioEsperado && fechaInicio > ahora) return "no_iniciada";
+      return f.estadoAvance || "bajo_analisis";
+    };
+    const autoEstado = calcEstado();
     const savedRec = {...rec,...f,adjuntosResolucion,comentarios,nuevoComentario:undefined,
+      estadoAvance: autoEstado,
       fechaCierreConfirmada,fechaInicioOriginal,fechaOriginalCierre,ejecutorMailOriginal,fechaAsignacion,
       updatedAt:new Date().toISOString()};
     await onSave(savedRec);
@@ -1551,7 +1572,7 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
     // Lista
     mainTab==="reclamos" && view==="lista" && h('div',{style:{padding:"0 24px 24px",overflowX:"auto"}},
       h('table',{style:{width:"100%",borderCollapse:"separate",borderSpacing:"0 5px"}},
-        h('thead',null,h('tr',null,...["Nº","Fecha","Sector","Solicitante","Tipo","Detalle","Criticidad","Estado","Ejecutor","Acción","Cierre",""].map(hd=>
+        h('thead',null,h('tr',null,...["Nº","Fecha","Solicitante","Sector","Detalle","Criticidad (socio→int)","Estado","Ejecutor","Acción","Cierre",""].map(hd=>
           h('th',{key:hd,style:{textAlign:"left",padding:"8px 10px",fontSize:11,color:"#94a3b8",fontWeight:600,letterSpacing:0.5,textTransform:"uppercase"}},hd)))),
         h('tbody',null,
           !filtrados.length && h('tr',null,h('td',{colSpan:12,style:{textAlign:"center",padding:40,color:"#94a3b8"}},"No hay reclamos")),
@@ -1567,10 +1588,20 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
               h('td',{style:{padding:"11px 10px",fontSize:12,maxWidth:110}},
                 h('div',{style:{fontWeight:600,color:"#1e293b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},r.nombre||"—"),
                 h('div',{style:{fontSize:10,color:"#94a3b8"}},r.tipo||"")),
-              h('td',{style:{padding:"11px 10px",fontSize:12,fontWeight:500,maxWidth:100}},r.sector),
-              h('td',{style:{padding:"11px 10px",fontSize:13}},cat?.icon),
-              h('td',{style:{padding:"11px 10px",fontSize:11,color:"#64748b",maxWidth:130,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},r.sub),
-              h('td',{style:{padding:"11px 10px"}},h(Badge,{color:crit?.color,label:crit?.label,sm:true})),
+              h('td',{style:{padding:"11px 10px",fontSize:12,fontWeight:500}},
+                h('div',{style:{fontWeight:500,color:"#1e293b"}},r.sector),
+                h('div',{style:{fontSize:11,color:"#64748b",marginTop:1}},cat?.icon+" "+(r.sub||""))),
+              h('td',{style:{padding:"11px 10px"}},
+                (() => {
+                  const socio = PRIS.find(p=>p.id===r.pri);
+                  const inte  = PRIS.find(p=>p.id===r.criticidad);
+                  if(!socio && !inte) return h('span',{style:{color:"#cbd5e1"}},"—");
+                  if(!inte || r.pri===r.criticidad) return h(Badge,{color:socio?.color,label:socio?.label,sm:true});
+                  return h('div',{style:{display:"flex",alignItems:"center",gap:4}},
+                    h(Badge,{color:socio?.color,label:socio?.label,sm:true}),
+                    h('span',{style:{color:"#94a3b8",fontSize:10}},"→"),
+                    h(Badge,{color:inte?.color,label:inte?.label,sm:true}));
+                })()),
               h('td',{style:{padding:"11px 10px"}},h(Badge,{color:est?.color,label:est?.label,sm:true})),
               h('td',{style:{padding:"11px 10px",fontSize:11,color:"#64748b"}},
                 r.ejecutorRechazado ? h('span',{style:{color:"#dc2626",fontWeight:600,fontSize:11}},"❌ Rechazada")
@@ -2143,6 +2174,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
+
 
 
 
