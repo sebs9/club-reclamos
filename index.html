@@ -603,34 +603,28 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
     const ejecutorMailOriginal = rec.ejecutorMailOriginal || (f.ejecutorMail !== rec.ejecutorMail ? f.ejecutorMail : rec.ejecutorMailOriginal);
 
     const fechaAsignacion = (f.ejecutorMail && f.ejecutorMail!==rec.ejecutorMail) ? new Date().toISOString() : rec.fechaAsignacion;
-    const ejListaNuevos = (f.ejecutores_lista||[]).filter(ej=>ej.mail&&!(rec.ejecutores_lista||[]).find(x=>x.mail===ej.mail));
-    const esHoy = f.fechaInicioEsperado && f.fechaInicioEsperado<=new Date().toISOString().split("T")[0];
-    if(f.ejecutorMail && f.ejecutorMail!==rec.ejecutorMail){
+    // Only send emails to executors that are NEWLY added (not already in rec)
+    const ejsNuevos = (f.ejecutores_lista||[]).filter(ej=>
+      ej.mail && !ej.mail.includes("externo") &&
+      !(rec.ejecutores_lista||[]).find(x=>x.mail===ej.mail)
+    );
+    if(ejsNuevos.length > 0){
       const appUrl=window.location.href.split("?")[0];
       const catRespMails=(getCatCfg(rec.cat).responsables||[]).map(x=>x.mail);
-      // Send individual email per executor with their own confirm link
-      const ejsToEmail = (f.ejecutores_lista||[]).filter(ej=>ej.mail&&!ej.mail.includes("externo"));
-      const emailTargets = ejsToEmail.length > 0 ? ejsToEmail : [{mail:f.ejecutorMail,nombre:f.ejecutorNombre}];
-      for(const ejCurrent of emailTargets) {
-      const cc=[...catRespMails].filter(e=>e&&e!==ejCurrent.mail);
-      await sendEmail({to:ejCurrent.mail,cc,
-        subject:`[Asturiano] Tarea asignada — ${rec.numero}: ${rec.sector}`,
-  htmlBody:(()=>{
+      for(const ejCurrent of ejsNuevos) {
+        const cc=[...catRespMails].filter(e=>e&&e!==ejCurrent.mail);
         const isSameDay = f.fechaInicioEsperado && f.fechaCierre && f.fechaInicioEsperado===f.fechaCierre;
         const startDate = (f.fechaInicioEsperado||new Date().toISOString().split("T")[0]).replace(/-/g,"");
         const startTime = (isSameDay && f.horaInicio) ? "T"+f.horaInicio.replace(":","")+"00" : "";
         const endTime = (isSameDay && f.horaFin) ? "T"+f.horaFin.replace(":","")+"00" : "";
         const endDate = (f.fechaCierre||f.fechaInicioEsperado||new Date().toISOString().split("T")[0]).replace(/-/g,"");
-        const calTitle = encodeURIComponent(`🔧 ${rec.sector} — ${rec.numero}`);
-        const calDesc = encodeURIComponent(`Tarea: ${cat?.label} › ${rec.sub}\nDescripción: ${rec.desc}\nNúmero: ${rec.numero}\nConfirmar resolución: ${appUrl}?completar=${rec.id}`);
+        const calTitle = encodeURIComponent(`Tarea ${rec.sector} — ${rec.numero}`);
+        const calDesc = encodeURIComponent(`Tarea: ${cat?.label} > ${rec.sub}\nDescripcion: ${rec.desc}\nNumero: ${rec.numero}\nCompletar: ${appUrl}?completar=${rec.id}`);
         const calLink = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${calTitle}&dates=${startDate}${startTime}/${endDate}${endTime}&details=${calDesc}`;
-        const calReminderTitle = encodeURIComponent(`✅ Confirmar resolución — ${rec.numero}`);
+        const calReminderTitle = encodeURIComponent(`Confirmar resolucion — ${rec.numero}`);
         const calReminderDesc = encodeURIComponent(`Confirmar que la tarea ${rec.numero} fue completada:\n${appUrl}?completar=${rec.id}`);
         const calReminderLink = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${calReminderTitle}&dates=${endDate}/${endDate}&details=${calReminderDesc}`;
-        const ejNombres = ejCurrent.nombre || f.ejecutorNombre;
-        const comentarioEj = f.nuevoComentario?.trim() ? `\n\n💬 INSTRUCCIONES DEL RESPONSABLE:\n${f.nuevoComentario.trim()}` : "";
         const fotosReclamo = (rec.adjuntos||[]).filter(a=>a.url);
-        const fotosInfo = fotosReclamo.length > 0 ? `\n\n📎 FOTOS DEL PROBLEMA:\n${fotosReclamo.map(a=>a.url).join("\n")}` : "";
         const fotosHtml = fotosReclamo.length > 0
           ? `<div style="margin-top:12px"><div style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Fotos del problema</div><div>${fotosReclamo.map(a=>`<a href="${a.url}" target="_blank"><img src="${a.url}" style="width:80px;height:80px;object-fit:cover;border-radius:8px;border:1px solid #e2e8f0;margin-right:6px"></a>`).join('')}</div></div>`
           : '';
@@ -644,14 +638,14 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
             <div style="color:white;font-size:20px;font-weight:700">Tarea asignada — ${rec.numero}</div>
           </div>
           <div style="background:white;padding:24px;border-radius:0 0 12px 12px;border:1px solid #e2e8f0">
-            <p style="color:#475569;font-size:15px;margin:0 0 16px">Hola <strong>${ejNombres}</strong>, se te asignó la siguiente tarea:</p>
+            <p style="color:#475569;font-size:15px;margin:0 0 16px">Hola <strong>${ejCurrent.nombre}</strong>, se te asignó la siguiente tarea:</p>
             ${comentarioHtml}
             <div style="background:#f8fafc;border-radius:8px;padding:14px;margin-bottom:16px">
               <table style="width:100%;font-size:13px">
-                <tr><td style="padding:4px 0;color:#64748b;width:120px">Número:</td><td style="font-weight:700;font-family:monospace;color:#3b82f6">${rec.numero}</td></tr>
+                <tr><td style="padding:4px 0;color:#64748b;width:120px">Numero:</td><td style="font-weight:700;font-family:monospace;color:#3b82f6">${rec.numero}</td></tr>
                 <tr><td style="padding:4px 0;color:#64748b">Sector:</td><td style="font-weight:600">${rec.sector}</td></tr>
                 <tr><td style="padding:4px 0;color:#64748b">Tipo:</td><td>${rec.sub}</td></tr>
-                <tr><td style="padding:4px 0;color:#64748b">Descripción:</td><td>${rec.desc}</td></tr>
+                <tr><td style="padding:4px 0;color:#64748b">Descripcion:</td><td>${rec.desc}</td></tr>
                 <tr><td style="padding:4px 0;color:#64748b">Fecha inicio:</td><td>${fd(f.fechaInicioEsperado||'')}</td></tr>
                 <tr><td style="padding:4px 0;color:#64748b">Fecha cierre:</td><td>${fd(f.fechaCierre)}</td></tr>
                 ${horaInfo}
@@ -667,14 +661,13 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
               <a href="${calReminderLink}" style="display:inline-block;padding:8px 16px;background:#6b7280;color:white;text-decoration:none;border-radius:8px;font-size:13px;font-weight:600">Recordatorio de cierre</a>
             </div>
             <div style="margin-top:14px;padding:10px 14px;background:#f0fdf4;border-radius:8px;font-size:12px;color:#15803d">
-              Cuando completes la tarea, confirma la resolución: <a href="${appUrl}?completar=${rec.id}" style="color:#15803d;font-weight:700">Marcar como completado</a>
+              Cuando completes la tarea, confirma la resolucion: <a href="${appUrl}?completar=${rec.id}" style="color:#15803d;font-weight:700">Marcar como completado</a>
             </div>
           </div>
           <div style="text-align:center;color:#94a3b8;font-size:11px;margin-top:12px">Asturiano — Sistema de Reclamos</div>
         </div>`;
-        return ejHtml;
-      })()});
-      } // end for ejCurrent
+        await sendEmail({to:ejCurrent.mail, cc, subject:`[Asturiano] Tarea asignada — ${rec.numero}: ${rec.sector}`, htmlBody:ejHtml, body:`Tarea asignada ${rec.numero} - ${rec.sector}. Confirmar: ${appUrl}?confirmar=${rec.id}&mail=${encodeURIComponent(ejCurrent.mail)}`});
+      }
     }
     const fechaCierreConfirmada = f.fechaCierre ? f.fechaCierre : rec.fechaCierreConfirmada||null;
     // Upload new adjuntosResolucion that still have base64 data
@@ -2174,6 +2167,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
+
 
 
 
