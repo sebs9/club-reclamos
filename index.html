@@ -612,9 +612,10 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
     if(ejsNuevos.length > 0){
       const appUrl=window.location.href.split("?")[0];
       const catRespMails=(getCatCfg(rec.cat).responsables||[]).map(x=>x.mail);
+      const todosLosMailsEjs = ejsNuevos.map(e => e.mail);
       for(const ejCurrent of ejsNuevos) {
-        // CC: only category responsables, never other executors
-        const cc = catRespMails.filter(e => e && e !== ejCurrent.mail);
+        // CC: only category responsables, never any executor
+        const cc = catRespMails.filter(e => e && !todosLosMailsEjs.includes(e));
         const isSameDay = f.fechaInicioEsperado && f.fechaCierre && f.fechaInicioEsperado===f.fechaCierre;
         const startDate = (f.fechaInicioEsperado||new Date().toISOString().split("T")[0]).replace(/-/g,"");
         const startTime = (isSameDay && f.horaInicio) ? "T"+f.horaInicio.replace(":","")+"00" : "";
