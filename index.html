@@ -562,6 +562,7 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
   const selectEj = mail => { const ej=ejecutores.find(e=>e.mail===mail); set("ejecutorMail",mail); if(ej) set("ejecutorNombre",ej.nombre); };
 
   const save = async () => {
+    if(sending) return; // guard doble-click
     setSaveErr("");
     // Block completada without resolution description
     if(f.estadoAvance==="completada" && !f.descripcionResolucion.trim()) {
@@ -685,7 +686,7 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
       const fechaInicio = new Date(f.fechaInicioEsperado||f.fechaInicioActualizada||"");
       const fechaCierreEfectiva = new Date(f.fechaCierreActualizada||f.fechaCierre||"");
       // No executor assigned yet
-      if(!f.ejecutorMail || f.ejecutorMail.includes("externo")) return "bajo_analisis";
+      if(!f.ejecutorMail || f.ejecutorMail.trim()==="") return "bajo_analisis";
       // Has executor but no dates
       if(!f.fechaInicioEsperado && !f.fechaCierre) return "sin_resolucion";
       // Overdue
@@ -697,7 +698,7 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
       return f.estadoAvance || "bajo_analisis";
     };
     const autoEstado = calcEstado();
-    const savedRec = {...rec,...f,adjuntosResolucion,comentarios,nuevoComentario:undefined,
+    let savedRec = {...rec,...f,adjuntosResolucion,comentarios,nuevoComentario:undefined,
       estadoAvance: autoEstado,
       fechaCierreConfirmada,fechaInicioOriginal,fechaOriginalCierre,ejecutorMailOriginal,fechaAsignacion,
       updatedAt:new Date().toISOString()};
@@ -1567,7 +1568,7 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
     // Lista
     mainTab==="reclamos" && view==="lista" && h('div',{style:{padding:"0 24px 24px",overflowX:"auto"}},
       h('table',{style:{width:"100%",borderCollapse:"separate",borderSpacing:"0 5px"}},
-        h('thead',null,h('tr',null,...["Nº","Fecha","Solicitante","Sector","Detalle","Criticidad (socio→int)","Estado","Ejecutor","Acción","Cierre",""].map(hd=>
+        h('thead',null,h('tr',null,...["Nº","Fecha","Solicitante","Sector","Detalle","Criticidad (socio→int)","Ejecutor","Estado","Acción","Cierre",""].map(hd=>
           h('th',{key:hd,style:{textAlign:"left",padding:"8px 10px",fontSize:11,color:"#94a3b8",fontWeight:600,letterSpacing:0.5,textTransform:"uppercase"}},hd)))),
         h('tbody',null,
           !filtrados.length && h('tr',null,h('td',{colSpan:12,style:{textAlign:"center",padding:40,color:"#94a3b8"}},"No hay reclamos")),
@@ -1597,7 +1598,6 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
                     h('span',{style:{color:"#94a3b8",fontSize:10}},"→"),
                     h(Badge,{color:inte?.color,label:inte?.label,sm:true}));
                 })()),
-              h('td',{style:{padding:"11px 10px"}},h(Badge,{color:est?.color,label:est?.label,sm:true})),
               h('td',{style:{padding:"11px 10px",fontSize:11}},
                 (() => {
                   const lista = r.ejecutores_lista||[];
@@ -1622,11 +1622,28 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
                     }));
                 })()),
               h('td',{style:{padding:"11px 10px"}},(() => {
+                const lista = r.ejecutores_lista||[];
+                if(lista.length > 0) {
+                  const allConf = lista.every(ej=>ej.confirmado===true);
+                  const allRej  = lista.every(ej=>ej.rechazado===true);
+                  if(allConf) return h(Badge,{color:"#15803d",label:"Confirmado ✓",sm:true});
+                  if(allRej)  return h(Badge,{color:"#dc2626",label:"Rechazado ✗",sm:true});
+                  // Alguno pendiente → Esp. confirmación (independientemente de si alguno confirmó)
+                  return h(Badge,{color:"#6d28d9",label:"Esp. confirmación",sm:true});
+                }
+                // Sin lista → badge del estado del reclamo
+                if(!r.ejecutorMail) return h(Badge,{color:"#6b7280",label:"Pend. asignación",sm:true});
+                if(r.ejecutorRechazado) return h(Badge,{color:"#dc2626",label:"Rechazado ✗",sm:true});
+                if(r.ejecutorConfirmado) return h(Badge,{color:"#15803d",label:"Confirmado ✓",sm:true});
+                if(r.ejecutorMail) return h(Badge,{color:"#6d28d9",label:"Esp. confirmación",sm:true});
+                return h(Badge,{color:est?.color,label:est?.label,sm:true});
+              })()),
+              h('td',{style:{padding:"11px 10px"}},(() => {
                 const acc = getAccionRequerida(r);
                 if(!acc) return h('span',{style:{color:"#cbd5e1",fontSize:11}},"—");
                 return h('span',{style:{display:"inline-block",padding:"3px 8px",borderRadius:6,fontSize:11,fontWeight:700,color:acc.color,background:acc.bg,whiteSpace:"nowrap"}},acc.label);
               })()),
-              h('td',{style:{padding:"11px 10px",fontSize:11,color:"#64748b",whiteSpace:"nowrap"}},fd(r.fechaCierre)),
+              h('td',{style:{padding:"11px 10px",fontSize:11,color:"#64748b",whiteSpace:"nowrap"}},fd(r.fechaCierreConfirmada||r.fechaCierre)),
               h('td',{style:{padding:"11px 10px",borderRadius:"0 10px 10px 0"}},
                 h('button',{onClick:()=>setModal(r),style:{padding:"5px 12px",background:"#0f172a",color:"white",border:"none",borderRadius:7,cursor:"pointer",fontSize:12,fontWeight:600}},"Gestionar")));
           })))),
