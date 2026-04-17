@@ -187,9 +187,10 @@ function getAccionRequerida(r) {
   if (!r.ejecutorMail || r.ejecutorMail.trim() === "") {
     if (diasCreado > plazoDias) return {label:"⚠️ Fuera de plazo — acción urgente", color:"#dc2626", bg:"#fef2f2"};
     if (crit === "urgente") return {label:"🔴 Urgente — asignar ahora", color:"#dc2626", bg:"#fef2f2"};
-    return null;
+    return null; // "Pend. asignación" ya lo muestra el badge de estado
   }
   if (r.ejecutorRechazado) return {label:"❌ Reasignar ejecutor", color:"#dc2626", bg:"#fef2f2"};
+  // "Esperando confirmación" ya lo muestra el badge — no repetir
   if (r.estadoAvance === "sin_resolucion") return {label:"🟡 Sin resolución — en seguimiento", color:"#d97706", bg:"#fffbeb"};
   if (r.estadoAvance === "esperando_validacion") return {label:"🔵 Esperando validación directivo", color:"#6d28d9", bg:"#f5f3ff"};
   return null;
@@ -612,9 +613,9 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
     if(ejsNuevos.length > 0){
       const appUrl=window.location.href.split("?")[0];
       const catRespMails=(getCatCfg(rec.cat).responsables||[]).map(x=>x.mail);
-      const todosLosMailsEjs = ejsNuevos.map(e => e.mail);
+      const todosLosMailsEjs = ejsNuevos.map(e=>e.mail);
       for(const ejCurrent of ejsNuevos) {
-        // CC: only category responsables, never any executor
+        // CC: only category responsables, NEVER any executor (avoids duplicate mails)
         const cc = catRespMails.filter(e => e && !todosLosMailsEjs.includes(e));
         const isSameDay = f.fechaInicioEsperado && f.fechaCierre && f.fechaInicioEsperado===f.fechaCierre;
         const startDate = (f.fechaInicioEsperado||new Date().toISOString().split("T")[0]).replace(/-/g,"");
@@ -648,7 +649,7 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
             <div style="color:white;font-size:20px;font-weight:700">Tarea asignada — ${rec.numero}</div>
           </div>
           <div style="background:white;padding:24px;border-radius:0 0 12px 12px;border:1px solid #e2e8f0">
-            <p style="color:#475569;font-size:15px;margin:0 0 16px">Hola <strong>${saludoNombres}</strong>, se les asign&#243; la siguiente tarea:</p>
+            <p style="color:#475569;font-size:15px;margin:0 0 16px">Hola <strong>${saludoNombres}</strong>, se les asign&oacute; la siguiente tarea:</p>
             ${comentarioHtml}
             <div style="background:#f8fafc;border-radius:8px;padding:14px;margin-bottom:20px">
               <table style="width:100%;font-size:13px">
@@ -662,14 +663,14 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
               </table>
               ${fotosHtml}
             </div>
-            <div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:10px;text-transform:uppercase;letter-spacing:0.5px">&#10102; Confirm&#225; o rechaz&#225; la tarea</div>
+            <div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:10px;text-transform:uppercase;letter-spacing:0.5px">&#10102; Confirm&aacute; o rechaz&aacute; la tarea</div>
             <table style="width:100%;margin-bottom:20px"><tr>
               <td style="padding-right:6px"><a href="${confirmarUrl}" style="display:block;padding:13px 10px;background:#22c55e;color:white;text-decoration:none;border-radius:8px;font-weight:700;font-size:14px;text-align:center">&#10003; Confirmar tarea</a></td>
               <td style="padding-left:6px"><a href="${rechazarUrl}" style="display:block;padding:13px 10px;background:#ef4444;color:white;text-decoration:none;border-radius:8px;font-weight:700;font-size:14px;text-align:center">&#10007; Rechazar tarea</a></td>
             </tr></table>
             <div style="border-top:1px solid #f1f5f9;padding-top:16px;margin-bottom:16px">
-              <div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">&#10103; Agend&#225; los eventos (solo si confirm&#225;s)</div>
-              <p style="font-size:12px;color:#64748b;margin:0 0 10px">Una vez que confirm&#233;s la tarea, us&#225; este link para agregar los 2 eventos a tu calendario: el per&#237;odo de trabajo y el recordatorio de cierre.</p>
+              <div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">&#10103; Agend&aacute; los eventos (solo si confirm&aacute;s)</div>
+              <p style="font-size:12px;color:#64748b;margin:0 0 10px">Una vez que confirm&eacute;s la tarea, us&aacute; este link para agregar los 2 eventos a tu calendario: el per&iacute;odo de trabajo y el recordatorio de cierre.</p>
               <a href="${calendarUrl}" style="display:inline-block;padding:10px 18px;background:#3b82f6;color:white;text-decoration:none;border-radius:8px;font-weight:600;font-size:13px">&#128197; Agregar al calendario</a>
             </div>
             <div style="padding:10px 14px;background:#f0fdf4;border-radius:8px;font-size:12px;color:#15803d">
@@ -678,18 +679,7 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
           </div>
           <div style="text-align:center;color:#94a3b8;font-size:11px;margin-top:12px">Asturiano — Sistema de Reclamos</div>
         </div>`;
-        const ejBodyPlain = `Tarea asignada: ${rec.numero} — ${rec.sector}
-
-Sector: ${rec.sector}
-Problema: ${cat?.label} > ${rec.sub}
-Descripcion: ${rec.desc}
-Fecha inicio: ${fd(f.fechaInicioEsperado||'')}
-Fecha cierre: ${fd(f.fechaCierre)}
-
-CONFIRMAR: ${confirmarUrl}
-RECHAZAR: ${rechazarUrl}
-
-Calendario (solo si confirmaste): ${calendarUrl}`;
+        const ejBodyPlain = `Hola ${saludoNombres},\n\nSe les asignó la siguiente tarea:\n\nNumero: ${rec.numero}\nSector: ${rec.sector}\nProblema: ${cat?.label} > ${rec.sub}\nDescripcion: ${rec.desc}\nFecha inicio: ${fd(f.fechaInicioEsperado||'')}\nFecha cierre: ${fd(f.fechaCierre)}\n\n1. CONFIRMAR: ${confirmarUrl}\n   RECHAZAR: ${rechazarUrl}\n\n2. Calendario (solo si confirmaste): ${calendarUrl}\n\n3. Cuando completes: ${appUrl}?completar=${rec.id}`;
         await sendEmail({to:ejCurrent.mail, cc, subject:`[Asturiano] Tarea asignada — ${rec.numero}: ${rec.sector}`, htmlBody:ejHtml, body:ejBodyPlain});
       }
     }
@@ -1591,7 +1581,7 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
     // Lista
     mainTab==="reclamos" && view==="lista" && h('div',{style:{padding:"0 24px 24px",overflowX:"auto"}},
       h('table',{style:{width:"100%",borderCollapse:"separate",borderSpacing:"0 5px"}},
-        h('thead',null,h('tr',null,...["Nº","Fecha","Solicitante","Sector","Detalle","Criticidad (socio→int)","Estado","Ejecutor","Acción","Cierre",""].map(hd=>
+        h('thead',null,h('tr',null,...["Nº","Fecha","Solicitante","Sector","Detalle","Criticidad (socio→int)","Ejecutor","Estado / Acción","Cierre",""].map(hd=>
           h('th',{key:hd,style:{textAlign:"left",padding:"8px 10px",fontSize:11,color:"#94a3b8",fontWeight:600,letterSpacing:0.5,textTransform:"uppercase"}},hd)))),
         h('tbody',null,
           !filtrados.length && h('tr',null,h('td',{colSpan:12,style:{textAlign:"center",padding:40,color:"#94a3b8"}},"No hay reclamos")),
@@ -1621,36 +1611,55 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
                     h('span',{style:{color:"#94a3b8",fontSize:10}},"→"),
                     h(Badge,{color:inte?.color,label:inte?.label,sm:true}));
                 })()),
-              h('td',{style:{padding:"11px 10px"}},h(Badge,{color:est?.color,label:est?.label,sm:true})),
               h('td',{style:{padding:"11px 10px",fontSize:11}},
                 (() => {
                   const lista = r.ejecutores_lista||[];
                   if(lista.length === 0) {
                     if(!r.ejecutorNombre) return h('span',{style:{color:"#cbd5e1"}},"—");
-                    const badge = r.ejecutorRechazado ? "Rechazó" : r.ejecutorConfirmado ? "Confirmó ✅" : "Sin resp ⏳";
+                    const badge = r.ejecutorRechazado ? "Rechazó ✗" : r.ejecutorConfirmado ? "Confirmó ✓" : "Sin resp ⏳";
                     const bc = r.ejecutorRechazado ? "#dc2626" : r.ejecutorConfirmado ? "#15803d" : "#f97316";
                     return h('div',null,
                       h('div',{style:{fontWeight:600,color:"#1e293b",fontSize:12}},r.ejecutorNombre),
                       h('span',{style:{fontSize:10,color:bc,fontWeight:600}},badge));
                   }
-                  return h('div',{style:{display:"flex",flexDirection:"column",gap:4}},
+                  return h('div',{style:{display:"flex",flexDirection:"column",gap:3}},
                     ...lista.map((ej,i)=>{
                       const isConf = ej.confirmado===true;
-                      const isRej = ej.rechazado===true;
-                      const color = isRej?"#dc2626":isConf?"#15803d":"#f97316";
-                      const icon = isRej?"✗":isConf?"✓":"?";
-                      const bg = isRej?"#fef2f2":isConf?"#f0fdf4":"#fff7ed";
+                      const isRej  = ej.rechazado===true;
+                      const color  = isRej?"#dc2626":isConf?"#15803d":"#f97316";
+                      const icon   = isRej?"✗":isConf?"✓":"?";
+                      const bg     = isRej?"#fef2f2":isConf?"#f0fdf4":"#fff7ed";
                       return h('div',{key:i,style:{display:"flex",alignItems:"center",gap:4}},
                         h('span',{style:{fontSize:11,color:"#1e293b",fontWeight:500}},ej.nombre),
                         h('span',{style:{display:"inline-block",padding:"1px 6px",borderRadius:4,fontSize:10,fontWeight:700,color,background:bg}},icon));
                     }));
                 })()),
-              h('td',{style:{padding:"11px 10px"}},(() => {
+              h('td',{style:{padding:"11px 10px",minWidth:150}},(() => {
+                // Badge de confirmación
+                const lista = r.ejecutores_lista||[];
+                let confBadge;
+                if(lista.length > 0) {
+                  const allConf = lista.every(ej=>ej.confirmado===true);
+                  const allRej  = lista.every(ej=>ej.rechazado===true);
+                  if(allConf)     confBadge = h(Badge,{color:"#15803d",label:"Confirmado ✓",sm:true});
+                  else if(allRej) confBadge = h(Badge,{color:"#dc2626",label:"Rechazado ✗",sm:true});
+                  else            confBadge = h(Badge,{color:"#6d28d9",label:"Esp. confirmación",sm:true});
+                } else if(!r.ejecutorMail) {
+                  confBadge = h(Badge,{color:"#6b7280",label:"Pend. asignación",sm:true});
+                } else if(r.ejecutorRechazado) {
+                  confBadge = h(Badge,{color:"#dc2626",label:"Rechazado ✗",sm:true});
+                } else if(r.ejecutorConfirmado) {
+                  confBadge = h(Badge,{color:"#15803d",label:"Confirmado ✓",sm:true});
+                } else {
+                  confBadge = h(Badge,{color:"#6d28d9",label:"Esp. confirmación",sm:true});
+                }
+                // Acción adicional solo si agrega info nueva (no repite lo del badge)
                 const acc = getAccionRequerida(r);
-                if(!acc) return h('span',{style:{color:"#cbd5e1",fontSize:11}},"—");
-                return h('span',{style:{display:"inline-block",padding:"3px 8px",borderRadius:6,fontSize:11,fontWeight:700,color:acc.color,background:acc.bg,whiteSpace:"nowrap"}},acc.label);
+                return h('div',{style:{display:"flex",flexDirection:"column",gap:4}},
+                  confBadge,
+                  acc && h('span',{style:{display:"inline-block",padding:"2px 7px",borderRadius:6,fontSize:10,fontWeight:700,color:acc.color,background:acc.bg,whiteSpace:"nowrap"}},acc.label));
               })()),
-              h('td',{style:{padding:"11px 10px",fontSize:11,color:"#64748b",whiteSpace:"nowrap"}},fd(r.fechaCierre)),
+              h('td',{style:{padding:"11px 10px",fontSize:11,color:"#64748b",whiteSpace:"nowrap"}},fd(r.fechaCierreConfirmada||r.fechaCierre)),
               h('td',{style:{padding:"11px 10px",borderRadius:"0 10px 10px 0"}},
                 h('button',{onClick:()=>setModal(r),style:{padding:"5px 12px",background:"#0f172a",color:"white",border:"none",borderRadius:7,cursor:"pointer",fontSize:12,fontWeight:600}},"Gestionar")));
           })))),
@@ -2287,7 +2296,6 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
-
 
 
 
