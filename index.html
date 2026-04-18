@@ -2016,7 +2016,25 @@ function App() {
             const e2 = (r.fechaCierre||s).replace(/-/g,"");
             const appU = window.location.href.split("?")[0];
             const now = new Date().toISOString().replace(/[-:]/g,"").split(".")[0]+"Z";
-            const ics = `BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//Asturiano//Reclamos//ES\nBEGIN:VEVENT\nUID:tarea-${r.id}@asturiano\nDTSTAMP:${now}\nDTSTART;VALUE=DATE:${s}\nDTEND;VALUE=DATE:${e2||s}\nSUMMARY:Tarea ${r.sector} - ${r.numero}\nDESCRIPTION:${r.sub}\\n${r.desc}\\nCompletar: ${appU}?completar=${r.id}\nEND:VEVENT\nBEGIN:VEVENT\nUID:recordatorio-${r.id}@asturiano\nDTSTAMP:${now}\nDTSTART;VALUE=DATE:${e2||s}\nDTEND;VALUE=DATE:${e2||s}\nSUMMARY:Recordatorio cierre - ${r.numero}\nDESCRIPTION:Confirmar resolucion: ${appU}?completar=${r.id}\nEND:VEVENT\nEND:VCALENDAR`;
+            // Same-day with hours: use DATETIME format, otherwise use DATE
+            const isSameDay = s === e2;
+            let dtStart, dtEnd, dtEndReminder;
+            if(isSameDay && r.horaInicio) {
+              const hi = r.horaInicio.replace(":","")+"00";
+              const hf = r.horaFin ? r.horaFin.replace(":","")+"00" : String(Number(r.horaInicio.replace(":","").substring(0,2))+1).padStart(2,"0")+r.horaInicio.replace(":","").substring(2)+"00";
+              dtStart = `DTSTART:${s}T${hi}`;
+              dtEnd   = `DTEND:${s}T${hf}`;
+              dtEndReminder = `DTSTART;VALUE=DATE:${e2}\nDTEND;VALUE=DATE:${e2}`;
+            } else {
+              // Multi-day: DTEND must be day after for all-day events in iCal spec
+              const endDateObj = new Date(r.fechaCierre||r.fechaInicioEsperado);
+              endDateObj.setDate(endDateObj.getDate()+1);
+              const e2next = endDateObj.toISOString().split("T")[0].replace(/-/g,"");
+              dtStart = `DTSTART;VALUE=DATE:${s}`;
+              dtEnd   = `DTEND;VALUE=DATE:${e2next}`;
+              dtEndReminder = `DTSTART;VALUE=DATE:${e2}\nDTEND;VALUE=DATE:${e2next}`;
+            }
+            const ics = `BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//Asturiano//Reclamos//ES\nBEGIN:VEVENT\nUID:tarea-${r.id}@asturiano\nDTSTAMP:${now}\n${dtStart}\n${dtEnd}\nSUMMARY:Tarea ${r.sector} - ${r.numero}\nDESCRIPTION:${r.sub}\\n${r.desc}\\nCompletar: ${appU}?completar=${r.id}\nEND:VEVENT\nBEGIN:VEVENT\nUID:recordatorio-${r.id}@asturiano\nDTSTAMP:${now}\n${dtEndReminder}\nSUMMARY:Recordatorio cierre - ${r.numero}\nDESCRIPTION:Confirmar resolucion: ${appU}?completar=${r.id}\nEND:VEVENT\nEND:VCALENDAR`;
             const blob = new Blob([ics],{type:"text/calendar"});
             const url2 = URL.createObjectURL(blob);
             const a = document.createElement("a");
