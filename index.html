@@ -196,7 +196,25 @@ function getAccionRequerida(r) {
   return null;
 }
 
-// ── LOCAL STORE ────────────────────────────────────────────────────────────
+function getEstadoEjecucion(r) {
+  // No hay fecha de inicio → no mostrar nada
+  if (!r.fechaInicioEsperado && !r.fechaInicioOriginal) return null;
+  const ahora = new Date();
+  ahora.setHours(0,0,0,0);
+  const inicio = new Date(r.fechaInicioEsperado || r.fechaInicioOriginal);
+  inicio.setHours(0,0,0,0);
+  const cierreStr = r.fechaOriginalCierre || r.fechaCierre;
+  const cierre = cierreStr ? new Date(cierreStr) : null;
+  if (cierre) cierre.setHours(0,0,0,0);
+
+  if (r.ejecutorConfirmado && r.estadoAvance === "completada")
+    return { label: "Completada", color: "#15803d", bg: "#f0fdf4" };
+  if (cierre && ahora > cierre && r.estadoAvance !== "completada")
+    return { label: "Demorada", color: "#dc2626", bg: "#fef2f2" };
+  if (ahora >= inicio)
+    return { label: "En curso", color: "#3b82f6", bg: "#eff6ff" };
+  return { label: "No iniciada", color: "#6b7280", bg: "#f8fafc" };
+}
 const ls = {
   get: k => { try { const v=localStorage.getItem(k); return v?JSON.parse(v):null; } catch{return null;} },
   set: (k,v) => { try { localStorage.setItem(k,JSON.stringify(v)); } catch{} },
@@ -313,7 +331,7 @@ async function detectarDuplicados(nuevoRec, todosRecs) {
   // Use AI to compare descriptions
   try {
     // Only compare descriptions - sector/cat match already filtered
-    const prompt = `Compará la descripción del nuevo reclamo con los existentes. Evaluá similitud SOLO por descripción, ignorando sector/categoría que ya coinciden.
+    const prompt = `Compará la descripción del nueva solicitud con los existentes. Evaluá similitud SOLO por descripción, ignorando sector/categoría que ya coinciden.
 
 NUEVO RECLAMO [${nuevoRec.numero}]:
 "${nuevoRec.desc}"
@@ -322,7 +340,7 @@ RECLAMOS EXISTENTES:
 ${candidatos.map((r,i)=>`${i+1}. [${r.numero}] "${r.desc}"`).join("\n")}
 
 Respondé SOLO con JSON válido. Marcá "alta" solo si describen claramente el mismo problema físico. "media" si son parecidos pero pueden ser distintos.
-{"similares": [{"numero": "R-XXXXX", "similitud": "alta|media", "razon": "breve explicación en español", "descExistente": "descripción del reclamo existente"}]}
+{"similares": [{"numero": "R-XXXXX", "similitud": "alta|media", "razon": "breve explicación en español", "descExistente": "descripción de la solicitud existente"}]}
 Si no hay similares reales, respondé: {"similares": []}`;
 
     const resp = await fetch("https://api.anthropic.com/v1/messages", {
@@ -411,12 +429,12 @@ function FormularioSocio({onSubmit, reclamos}) {
     const appUrl = window.location.href.split("?")[0];
     const seguimientoUrl = appUrl+"?seguimiento="+n;
     // Email a intendencia
-    await sendEmail({to:NOTIFY_EMAIL, subject:`[Asturiano] Nuevo reclamo ${n} — ${f.sector}`,
-      body:`Nuevo reclamo registrado.\n\nNúmero: ${n}\nSolicitante: ${f.tipo} — ${f.nombre}\nCelular: ${f.celular||"—"}\nEmail: ${f.email||"—"}\nSector: ${f.sector}${f.ubicacion?`\nUbicación exacta: ${f.ubicacion}`:""}\nTipo: ${catConf?.label} › ${f.sub}\nPrioridad: ${pri?.label}\nDescripción: ${f.desc}`});
+    await sendEmail({to:NOTIFY_EMAIL, subject:`[Asturiano] Nueva solicitud ${n} — ${f.sector}`,
+      body:`Nueva solicitud registrada.\n\nNúmero: ${n}\nSolicitante: ${f.tipo} — ${f.nombre}\nCelular: ${f.celular||"—"}\nEmail: ${f.email||"—"}\nSector: ${f.sector}${f.ubicacion?`\nUbicación exacta: ${f.ubicacion}`:""}\nTipo: ${catConf?.label} › ${f.sub}\nPrioridad: ${pri?.label}\nDescripción: ${f.desc}`});
     // Email de confirmación al usuario
     if(f.email) {
-      await sendEmail({to:f.email, subject:`[Asturiano] Recibimos tu reclamo — ${n}`,
-        body:`Hola ${f.nombre},\n\nRecibimos tu reclamo y ya está siendo procesado por el equipo de intendencia.\n\nNúmero de reclamo: ${n}\nSector: ${f.sector}\nProblema: ${catConf?.label} › ${f.sub}\nDescripción: ${f.desc}\n\nPodés seguir el estado de tu reclamo en cualquier momento acá:\n${seguimientoUrl}\n\nTe notificaremos cuando haya novedades.\n\n— Equipo de Intendencia Asturiano`});
+      await sendEmail({to:f.email, subject:`[Asturiano] Recibimos tu solicitud — ${n}`,
+        body:`Hola ${f.nombre},\n\nRecibimos tu solicitud y ya está siendo procesado por el equipo de intendencia.\n\nNúmero de solicitud: ${n}\nSector: ${f.sector}\nProblema: ${catConf?.label} › ${f.sub}\nDescripción: ${f.desc}\n\nPodés seguir el estado de tu solicitud en cualquier momento acá:\n${seguimientoUrl}\n\nTe notificaremos cuando haya novedades.\n\n— Equipo de Intendencia Asturiano`});
     }
     setSending(false); setDone(true);
   };
@@ -424,14 +442,14 @@ function FormularioSocio({onSubmit, reclamos}) {
   if (done) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
     h('div',{style:{background:"white",borderRadius:20,padding:40,maxWidth:420,width:"100%",textAlign:"center",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}},
       h('div',{style:{fontSize:64,marginBottom:16}},"✅"),
-      h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:26,color:"#0f172a",margin:"0 0 8px"}},"Reclamo registrado"),
+      h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:26,color:"#0f172a",margin:"0 0 8px"}},"Solicitud registrada"),
       h('p',{style:{color:"#64748b",marginBottom:24,fontSize:15}},"Tu solicitud fue recibida por el equipo de intendencia."),
       h('div',{style:{background:"#f0fdf4",border:"2px solid #22c55e",borderRadius:12,padding:"16px 24px",marginBottom:24}},
-        h('div',{style:{fontSize:12,color:"#64748b",letterSpacing:1,textTransform:"uppercase",marginBottom:4}},"Número de reclamo"),
+        h('div',{style:{fontSize:12,color:"#64748b",letterSpacing:1,textTransform:"uppercase",marginBottom:4}},"Número de solicitud"),
         h('div',{style:{fontSize:28,fontWeight:800,color:"#15803d",fontFamily:"monospace"}},num)),
       h('p',{style:{fontSize:13,color:"#94a3b8"}},"Guardá este número para hacer seguimiento."),
       h('button',{onClick:()=>{setDone(false);setF({tipo:"",nombre:"",celular:"",email:"",sector:"",cat:"",sub:"",pri:"media",desc:"",ubicacion:"",adjuntos:[]});setDup(null);},
-        style:{marginTop:20,padding:"10px 28px",background:"#0f172a",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:600}},"Nuevo reclamo")));
+        style:{marginTop:20,padding:"10px 28px",background:"#0f172a",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:600}},"Nueva solicitud")));
 
   const catConf = CATS[f.cat];
   const iS = er => ({width:"100%",padding:"11px 14px",borderRadius:10,border:er?"2px solid #ef4444":"2px solid rgba(255,255,255,0.15)",background:"rgba(255,255,255,0.1)",color:er?"#fca5a5":"white",fontSize:14,outline:"none",boxSizing:"border-box"});
@@ -440,7 +458,7 @@ function FormularioSocio({onSubmit, reclamos}) {
   return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",padding:"20px 16px 80px"}},
     h('div',{style:{textAlign:"center",marginBottom:24,paddingTop:20}},
       h('div',{style:{fontSize:11,letterSpacing:3,color:"#93c5fd",textTransform:"uppercase",marginBottom:8}},"Sistema de Gestión"),
-      h('h1',{style:{fontFamily:"'Playfair Display',serif",fontSize:28,color:"white",fontWeight:900}},"Reportar un Problema"),
+      h('h1',{style:{fontFamily:"'Playfair Display',serif",fontSize:28,color:"white",fontWeight:900}},"Reportar una Solicitud"),
       h('div',{style:{width:40,height:3,background:"#3b82f6",margin:"10px auto 0",borderRadius:2}})),
     h('div',{style:{maxWidth:500,margin:"0 auto"}},
       h('div',{style:{background:"rgba(255,255,255,0.05)",borderRadius:16,padding:"22px 18px"}},
@@ -504,7 +522,7 @@ function FormularioSocio({onSubmit, reclamos}) {
               h('button',{onClick:()=>setF(p=>({...p,adjuntos:p.adjuntos.filter((_,idx)=>idx!==i)})),style:{background:"none",border:"none",cursor:"pointer",color:"#ef4444",fontSize:14,padding:0}},"✕")))),
           h('button',{onClick:()=>fileRef.current.click(),style:{padding:"9px 16px",borderRadius:9,border:"1.5px dashed rgba(255,255,255,0.25)",background:"transparent",color:"#94a3b8",cursor:"pointer",fontSize:13}},"📎 Adjuntar foto / video")),
         // Submit
-        h('button',{onClick:submit,disabled:sending,style:{width:"100%",padding:"15px",background:sending?"#475569":"linear-gradient(135deg,#3b82f6,#1d4ed8)",color:"white",border:"none",borderRadius:12,fontSize:16,fontWeight:700,cursor:sending?"not-allowed":"pointer"}},sending?"Enviando...":"Enviar Reclamo →"))));
+        h('button',{onClick:submit,disabled:sending,style:{width:"100%",padding:"15px",background:sending?"#475569":"linear-gradient(135deg,#3b82f6,#1d4ed8)",color:"white",border:"none",borderRadius:12,fontSize:16,fontWeight:700,cursor:sending?"not-allowed":"pointer"}},sending?"Enviando...":"Enviar Solicitud →"))));
 }
 
 // ── PANTALLA RECHAZO ───────────────────────────────────────────────────────
@@ -628,9 +646,9 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
         const calReminderTitle = encodeURIComponent(`Confirmar resolucion — ${rec.numero}`);
         const calReminderDesc = encodeURIComponent(`Confirmar que la tarea ${rec.numero} fue completada:\n${appUrl}?completar=${rec.id}`);
         const calReminderLink = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${calReminderTitle}&dates=${endDate}/${endDate}&details=${calReminderDesc}`;
-        const fotosReclamo = (rec.adjuntos||[]).filter(a=>a.url);
-        const fotosHtml = fotosReclamo.length > 0
-          ? `<div style="margin-top:12px"><div style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Fotos del problema</div><div>${fotosReclamo.map(a=>`<a href="${a.url}" target="_blank"><img src="${a.url}" style="width:80px;height:80px;object-fit:cover;border-radius:8px;border:1px solid #e2e8f0;margin-right:6px"></a>`).join('')}</div></div>`
+        const fotosSolicitud = (rec.adjuntos||[]).filter(a=>a.url);
+        const fotosHtml = fotosSolicitud.length > 0
+          ? `<div style="margin-top:12px"><div style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Fotos del problema</div><div>${fotosSolicitud.map(a=>`<a href="${a.url}" target="_blank"><img src="${a.url}" style="width:80px;height:80px;object-fit:cover;border-radius:8px;border:1px solid #e2e8f0;margin-right:6px"></a>`).join('')}</div></div>`
           : '';
         const comentarioHtml = f.nuevoComentario?.trim()
           ? `<div style="background:#fffbeb;border-left:4px solid #f59e0b;padding:10px 14px;border-radius:0 8px 8px 0;margin-bottom:14px"><div style="font-size:11px;font-weight:700;color:#92400e;margin-bottom:4px;text-transform:uppercase">Instrucciones del responsable</div><div style="color:#78350f;font-size:13px">${f.nuevoComentario.trim()}</div></div>`
@@ -787,7 +805,7 @@ Resolución: ${descripcion||"—"}`});
       // Header
       h('div',{style:{background:"#0f172a",padding:"18px 24px",borderRadius:"20px 20px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center"}},
         h('div',null,
-          h('div',{style:{fontSize:11,color:"#60a5fa",letterSpacing:2,textTransform:"uppercase"}},"Gestionar Reclamo"),
+          h('div',{style:{fontSize:11,color:"#60a5fa",letterSpacing:2,textTransform:"uppercase"}},"Gestionar Solicitud"),
           h('div',{style:{color:"white",fontSize:18,fontWeight:700,fontFamily:"'Playfair Display',serif"}},rec.numero+" — "+rec.sector)),
         h('div',{style:{display:"flex",gap:8,alignItems:"center"}},
           t && h(Badge,{color:t.color,bg:t.bg,label:t.label,sm:true}),
@@ -828,7 +846,7 @@ Resolución: ${descripcion||"—"}`});
               }))),
           rec.responsableArea?.nombre && h('div',{style:{marginTop:8,fontSize:12,color:"#64748b"}},"👔 "+rec.responsableArea.nombre),
           rec.posiblesDuplicados?.length > 0 && h('div',{style:{marginTop:8,background:"#fef9c3",border:"1.5px solid #fde047",borderRadius:8,padding:"8px 12px"}},
-            h('div',{style:{fontSize:12,fontWeight:700,color:"#854d0e",marginBottom:4}},"🔍 Posibles reclamos similares detectados"),
+            h('div',{style:{fontSize:12,fontWeight:700,color:"#854d0e",marginBottom:4}},"🔍 Posibles solicitudes similares detectados"),
             ...rec.posiblesDuplicados.map((d,i)=>h('div',{key:i,style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}},
               h('div',{style:{flex:1}},
                 h('div',{style:{fontSize:12,fontWeight:700,color:"#713f12",marginBottom:2}},(d.similitud==="alta"?"⚠️ Alta similitud ":"💡 Posible similitud ")+"— "+d.numero),
@@ -856,8 +874,8 @@ Resolución: ${descripcion||"—"}`});
                     };
                     await onSave(updated);
                     if(rec.email) await sendEmail({to:rec.email,
-                      subject:`[Asturiano] Tu reclamo fue consolidado — ${rec.numero}`,
-                      body:`Hola ${rec.nombre},\n\nTu reclamo ${rec.numero} fue consolidado con otro reclamo previo sobre el mismo problema en ${rec.sector}.\n\nAmbos serán resueltos juntos. La fecha estimada de resolución es ${fd(existing?.fechaCierreConfirmada||existing?.fechaCierre)}.\n\n— Equipo de Intendencia Asturiano`});
+                      subject:`[Asturiano] Tu solicitud fue consolidada — ${rec.numero}`,
+                      body:`Hola ${rec.nombre},\n\nTu solicitud ${rec.numero} fue consolidada con otra solicitud previa sobre el mismo problema en ${rec.sector}.\n\nAmbos serán resueltos juntos. La fecha estimada de resolución es ${fd(existing?.fechaCierreConfirmada||existing?.fechaCierre)}.\n\n— Equipo de Intendencia Asturiano`});
                   },
                   style:{padding:"4px 12px",background:"#854d0e",color:"white",border:"none",borderRadius:6,cursor:"pointer",fontSize:11,fontWeight:600}},"✅ Sí, consolidar"),
                 h('button',{onClick:()=>{
@@ -977,7 +995,7 @@ Resolución: ${descripcion||"—"}`});
           // Vincular a proyecto
           h('div',{style:{marginTop:12,background:"#f5f3ff",borderRadius:10,padding:12,border:"1.5px solid #ddd6fe"}},
             h('div',{style:{fontSize:12,fontWeight:700,color:"#5b21b6",marginBottom:4}},"🏗️ Vincular a proyecto"),
-            h('div',{style:{fontSize:12,color:"#6d28d9",marginBottom:8}},"Si este reclamo forma parte de una obra o proyecto, vinculalo acá:"),
+            h('div',{style:{fontSize:12,color:"#6d28d9",marginBottom:8}},"Si esta solicitud forma parte de una obra o proyecto, vinculalo acá:"),
             h('div',null,
               h('select',{value:f.proyectoVinculadoId||"",onChange:e=>{
                 const pId=Number(e.target.value);
@@ -1032,7 +1050,7 @@ Resolución: ${descripcion||"—"}`});
                   h('div',{style:{display:"flex",justifyContent:"space-between",marginBottom:4}},
                     h('span',{style:{fontSize:12,fontWeight:600,color:"#94a3b8"}},"Sistema"),
                     h('span',{style:{fontSize:11,color:"#94a3b8"}},fdt(rec.createdAt))),
-                  h('div',{style:{fontSize:13,color:"#94a3b8"}},"Reclamo creado por "+(rec.nombre||"anónimo")+" ("+rec.tipo+")")))),
+                  h('div',{style:{fontSize:13,color:"#94a3b8"}},"Solicitud creada por "+(rec.nombre||"anónimo")+" ("+rec.tipo+")")))),
 
         saveErr && h('div',{style:{background:"#fef2f2",border:"1.5px solid #fecaca",borderRadius:8,padding:"10px 14px",marginBottom:10,fontSize:13,color:"#dc2626"}},saveErr),
         h('div',{style:{display:"flex",gap:10,marginTop:4}},
@@ -1149,7 +1167,7 @@ function PanelConfig({onClose, onSaveEjecutores}) {
                     h('td',{style:{padding:"10px 14px",fontSize:13,color:"#374151"}},"Aparece como 'Fuera de plazo' en el mail diario"));
                 })))),
           h('div',{style:{background:"#eff6ff",border:"1.5px solid #bfdbfe",borderRadius:10,padding:12,fontSize:12,color:"#1d4ed8",lineHeight:1.6}},
-            "💡 Los plazos se cuentan desde la creación del reclamo. Si un reclamo supera el tiempo asignado sin ser gestionado, figura como 'Fuera de plazo' en el mail diario al responsable.")),
+            "💡 Los plazos se cuentan desde la creación de la solicitud. Si una solicitud supera el tiempo asignado sin ser gestionado, figura como 'Fuera de plazo' en el mail diario al responsable.")),
 
         // TAB SISTEMA
         tab==="sistema" && h('div',null,
@@ -1172,7 +1190,7 @@ function Kanban({recs, onEdit}) {
           h('span',{style:{fontSize:13,fontWeight:700,color:est.color}},est.label),
           h('span',{style:{marginLeft:"auto",fontSize:12,fontWeight:700,color:est.color,background:est.color+"22",padding:"2px 8px",borderRadius:10}},items.length)),
         h('div',{style:{display:"flex",flexDirection:"column",gap:8}},
-          !items.length && h('div',{style:{textAlign:"center",padding:20,color:"#cbd5e1",fontSize:13,background:"#f8fafc",borderRadius:10,border:"1.5px dashed #e2e8f0"}},"Sin reclamos"),
+          !items.length && h('div',{style:{textAlign:"center",padding:20,color:"#cbd5e1",fontSize:13,background:"#f8fafc",borderRadius:10,border:"1.5px dashed #e2e8f0"}},"Sin solicitudes"),
           ...items.map(r=>{
             const cat=CATS[r.cat]; const pri=PRIS.find(p=>p.id===(r.criticidad||r.pri)); const t=getTiming(r);
             return h('div',{key:r.id,onClick:()=>onEdit(r),style:{background:"white",borderRadius:12,padding:12,boxShadow:"0 1px 4px rgba(0,0,0,0.08)",borderLeft:`4px solid ${pri?.color||"#94a3b8"}`,cursor:"pointer"}},
@@ -1226,8 +1244,8 @@ function ModalProyecto({proyecto, onClose, onSave, ejecutores, recs}) {
         const rec=recs.find(r=>r.numero===num);
         if(rec?.email){
           await sendEmail({to:rec.email,
-            subject:`[Asturiano]  Proyecto completado — tu reclamo fue resuelto`,
-            body:`Hola ${rec.nombre},\n\nEl proyecto "${f.titulo}" al que estaba vinculado tu reclamo ${rec.numero} (${rec.sector}) fue completado.\n\nTu problema ha sido resuelto. Te invitamos a calificar la resolución:\n${appUrl}?calificar=${rec.id}\n\n— Equipo de Intendencia Asturiano`});
+            subject:`[Asturiano]  Proyecto completado — tu solicitud fue resuelta`,
+            body:`Hola ${rec.nombre},\n\nEl proyecto "${f.titulo}" al que estaba vinculada tu solicitud ${rec.numero} (${rec.sector}) fue completado.\n\nTu problema ha sido resuelto. Te invitamos a calificar la resolución:\n${appUrl}?calificar=${rec.id}\n\n— Equipo de Intendencia Asturiano`});
         }
       }
     }
@@ -1329,7 +1347,7 @@ function ModalProyecto({proyecto, onClose, onSave, ejecutores, recs}) {
                 h('button',{onClick:()=>set("reclamosVinculados",(f.reclamosVinculados||[]).filter((_,idx)=>idx!==i)),style:{background:"none",border:"none",cursor:"pointer",color:"#ef4444",fontSize:14}},"✕"));
             })),
           h('div',{style:{display:"flex",gap:8}},
-            h('input',{id:"inputRecProj",placeholder:"Número de reclamo (Ej: R-123456)",style:{...aS(),flex:1}}),
+            h('input',{id:"inputRecProj",placeholder:"Número de solicitud (Ej: R-123456)",style:{...aS(),flex:1}}),
             h('button',{onClick:()=>{const inp=document.getElementById("inputRecProj");const v=(inp?.value||"").trim().toUpperCase();if(v&&!(f.reclamosVinculados||[]).includes(v)){set("reclamosVinculados",[...(f.reclamosVinculados||[]),v]);if(inp)inp.value="";}},
               style:{padding:"9px 16px",background:"#7c3aed",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontWeight:600}},"+ Vincular"))),
 
@@ -1486,9 +1504,9 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
       if (!r.ejecutorMail || !r.fechaInicioOriginal) {
         if (diasCreado >= plazos.directivo) {
           const dest=[...dirMails,...respMails].filter(Boolean);
-          if(dest.length){ await sendEmail({to:dest, subject:`[Asturiano]  Reclamo sin asignar — ${r.numero}`, body:`El reclamo ${r.numero} lleva ${formatTiempoJS(diasCreado)} sin ejecutor ni fechas.\n\nSector: ${r.sector}\nDescripción: ${r.desc}\nCriticidad: ${crit}\n\n${appUrl}`}); enviados++; }
+          if(dest.length){ await sendEmail({to:dest, subject:`[Asturiano]  Solicitud sin asignar — ${r.numero}`, body:`La solicitud ${r.numero} lleva ${formatTiempoJS(diasCreado)} sin ejecutor ni fechas.\n\nSector: ${r.sector}\nDescripción: ${r.desc}\nCriticidad: ${crit}\n\n${appUrl}`}); enviados++; }
         } else if (diasCreado >= plazos.recordatorio) {
-          if(respMails.length){ await sendEmail({to:respMails, subject:`[Asturiano]  Reclamo pendiente de asignación — ${r.numero}`, body:`El reclamo ${r.numero} no tiene ejecutor ni fechas asignadas.\n\nSector: ${r.sector}\nDescripción: ${r.desc}\n\nIngresá al panel:\n${appUrl}`}); enviados++; }
+          if(respMails.length){ await sendEmail({to:respMails, subject:`[Asturiano]  Solicitud pendiente de asignación — ${r.numero}`, body:`La solicitud ${r.numero} no tiene ejecutor ni fechas asignadas.\n\nSector: ${r.sector}\nDescripción: ${r.desc}\n\nIngresá al panel:\n${appUrl}`}); enviados++; }
         }
         continue;
       }
@@ -1581,10 +1599,10 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
     // Lista
     mainTab==="reclamos" && view==="lista" && h('div',{style:{padding:"0 24px 24px",overflowX:"auto"}},
       h('table',{style:{width:"100%",borderCollapse:"separate",borderSpacing:"0 5px"}},
-        h('thead',null,h('tr',null,...["Nº","Fecha","Solicitante","Sector","Detalle","Criticidad (socio→int)","Ejecutor","Estado / Acción","Cierre",""].map(hd=>
+        h('thead',null,h('tr',null,...["Nº","Fecha","Solicitante","Sector","Detalle","Criticidad (socio→int)","Ejecutor","Acción","Estado","Cierre",""].map(hd=>
           h('th',{key:hd,style:{textAlign:"left",padding:"8px 10px",fontSize:11,color:"#94a3b8",fontWeight:600,letterSpacing:0.5,textTransform:"uppercase"}},hd)))),
         h('tbody',null,
-          !filtrados.length && h('tr',null,h('td',{colSpan:12,style:{textAlign:"center",padding:40,color:"#94a3b8"}},"No hay reclamos")),
+          !filtrados.length && h('tr',null,h('td',{colSpan:12,style:{textAlign:"center",padding:40,color:"#94a3b8"}},"No hay solicitudes")),
           ...filtrados.map(r=>{
             const cat=CATS[r.cat]; const crit=PRIS.find(p=>p.id===(r.criticidad||r.pri));
             const est=ESTADOS.find(e=>e.id===r.estadoAvance); const t=getTiming(r);
@@ -1660,6 +1678,11 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
                   confBadge,
                   acc && h('span',{style:{display:"inline-block",padding:"2px 7px",borderRadius:6,fontSize:10,fontWeight:700,color:acc.color,background:acc.bg,whiteSpace:"nowrap"}},acc.label));
               })()),
+              h('td',{style:{padding:"11px 10px"}},(() => {
+                const ee = getEstadoEjecucion(r);
+                if(!ee) return h('span',{style:{color:"#cbd5e1",fontSize:11}},"—");
+                return h('span',{style:{display:"inline-block",padding:"3px 8px",borderRadius:6,fontSize:11,fontWeight:600,color:ee.color,background:ee.bg,whiteSpace:"nowrap"}},ee.label);
+              })()),
               h('td',{style:{padding:"11px 10px",fontSize:11,color:"#64748b",whiteSpace:"nowrap"}},fd(r.fechaCierreConfirmada||r.fechaCierre)),
               h('td',{style:{padding:"11px 10px",borderRadius:"0 10px 10px 0"}},
                 h('button',{onClick:()=>setModal(r),style:{padding:"5px 12px",background:"#0f172a",color:"white",border:"none",borderRadius:7,cursor:"pointer",fontSize:12,fontWeight:600}},"Gestionar")));
@@ -1698,7 +1721,7 @@ function CompletarView({recId, recs, setRecs, loaded}) {
   if(!loaded) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:18}},"Cargando...");
   if(!rec) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
     h('div',{style:{background:"white",borderRadius:20,padding:40,maxWidth:420,width:"100%",textAlign:"center"}},
-      h('div',{style:{fontSize:48,marginBottom:16}},"🔍"),h('p',{style:{color:"#64748b"}},"Reclamo no encontrado.")));
+      h('div',{style:{fontSize:48,marginBottom:16}},"🔍"),h('p',{style:{color:"#64748b"}},"Solicitud no encontrada.")));
 
   if(done) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
     h('div',{style:{background:"white",borderRadius:20,padding:40,maxWidth:420,width:"100%",textAlign:"center"}},
@@ -1720,8 +1743,8 @@ function CompletarView({recId, recs, setRecs, loaded}) {
       comentarios:[...(rec.comentarios||[]),{texto:`Ejecutor marcó como completada. Resolución: ${desc}`,fecha:new Date().toISOString(),autor:rec.ejecutorNombre||"Ejecutor"}]};
     await sbUpsert(updated);
     setRecs(prev=>prev.map(r=>r.id===rec.id?updated:r));
-    if(rec.email) await sendEmail({to:rec.email,subject:`[Asturiano]  Tu reclamo fue resuelto — ${rec.numero}`,
-      body:`Hola ${rec.nombre},\n\nNos alegra informarte que el problema que reportaste en ${rec.sector} fue resuelto. ${msgCat}.\n\nLo que se hizo:\n${desc}\n\nCuando tengas un momento, evaluá si el problema quedó resuelto y calificá la atención. En caso de no estar conforme podés reabrir el ticket:\n${calificarUrl}\n\nGracias por ayudarnos a mejorar el club.\n\n— Equipo de Intendencia Asturiano`});
+    if(rec.email) await sendEmail({to:rec.email,subject:`[Asturiano]  Tu solicitud fue resuelta — ${rec.numero}`,
+      body:`Hola ${rec.nombre},\n\nNos alegra informarte que el inconveniente que reportaste en ${rec.sector} fue resuelto. ${msgCat}.\n\nLo que se hizo:\n${desc}\n\nCuando tengas un momento, evaluá si el problema quedó resuelto y calificá la atención. En caso de no estar conforme podés reabrir el ticket:\n${calificarUrl}\n\nGracias por ayudarnos a mejorar el club.\n\n— Equipo de Intendencia Asturiano`});
     const dirMails=getDirectivos(rec.cat).map(d=>d.mail);
     const respMail=getResponsableMail(rec.cat);
     await sendEmail({to:[respMail,...dirMails].filter(Boolean),subject:`[Asturiano]  Tarea completada por ejecutor — ${rec.numero}`,body:`${rec.ejecutorNombre||"El ejecutor"} marcó como completada la tarea ${rec.numero} (${rec.sector}).\n\nResolución: ${desc}`});
@@ -1764,12 +1787,12 @@ function RechazarValidacionView({recId, recs, setRecs, loaded}) {
   if(!loaded) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:18}},"Cargando...");
   if(!rec) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
     h('div',{style:{background:"white",borderRadius:20,padding:40,maxWidth:420,width:"100%",textAlign:"center"}},
-      h('div',{style:{fontSize:48,marginBottom:16}},"🔍"),h('p',{style:{color:"#64748b"}},"Reclamo no encontrado.")));
+      h('div',{style:{fontSize:48,marginBottom:16}},"🔍"),h('p',{style:{color:"#64748b"}},"Solicitud no encontrada.")));
   if(done) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
     h('div',{style:{background:"white",borderRadius:20,padding:40,maxWidth:420,width:"100%",textAlign:"center"}},
       h('div',{style:{fontSize:64,marginBottom:16}},"🔄"),
-      h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:24,color:"#0f172a",margin:"0 0 12px"}},"Reclamo reabierto"),
-      h('p',{style:{color:"#64748b",fontSize:15,lineHeight:1.6}},"El reclamo fue reabierto. El responsable fue notificado con tu comentario."),
+      h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:24,color:"#0f172a",margin:"0 0 12px"}},"Solicitud reabierta"),
+      h('p',{style:{color:"#64748b",fontSize:15,lineHeight:1.6}},"La solicitud fue reabierta. El responsable fue notificado con tu comentario."),
       h('p',{style:{color:"#94a3b8",fontSize:13,marginTop:16}},"Podés cerrar esta ventana.")));
 
   const submit = async () => {
@@ -1784,11 +1807,11 @@ function RechazarValidacionView({recId, recs, setRecs, loaded}) {
     const respMail = getResponsableMail(rec.cat);
     if(respMail) await sendEmail({to:respMail,
       subject:`[Asturiano]  Resolución rechazada por directivo — ${rec.numero}`,
-      body:`El directivo rechazó la resolución del reclamo ${rec.numero} (${rec.sector}).
+      body:`El directivo rechazó la resolución de la solicitud ${rec.numero} (${rec.sector}).
 
 Motivo: ${motivo}
 
-El reclamo fue reabierto. Las fechas originales se mantienen.`});
+La solicitud fue reabierta. Las fechas originales se mantienen.`});
     setSending(false); setDone(true);
   };
 
@@ -1806,7 +1829,7 @@ El reclamo fue reabierto. Las fechas originales se mantienen.`});
         h('div',{style:{marginBottom:16}},
           h('label',{style:{display:"block",fontSize:12,fontWeight:600,color:err?"#dc2626":"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:0.5}},"Motivo del rechazo *"),
           h('textarea',{value:motivo,onChange:e=>{setMotivo(e.target.value);setErr(false);},rows:4,placeholder:"Explicá por qué la resolución no fue satisfactoria...",style:{width:"100%",padding:"10px 14px",borderRadius:8,border:err?"2px solid #ef4444":"1.5px solid #e2e8f0",fontSize:14,resize:"vertical",outline:"none",boxSizing:"border-box"}})),
-        h('button',{onClick:submit,disabled:sending,style:{width:"100%",padding:"14px",background:sending?"#94a3b8":"linear-gradient(135deg,#ef4444,#dc2626)",color:"white",border:"none",borderRadius:12,fontSize:15,fontWeight:700,cursor:"pointer"}},sending?"Enviando...":"🔄 Rechazar y reabrir reclamo"))));
+        h('button',{onClick:submit,disabled:sending,style:{width:"100%",padding:"14px",background:sending?"#94a3b8":"linear-gradient(135deg,#ef4444,#dc2626)",color:"white",border:"none",borderRadius:12,fontSize:15,fontWeight:700,cursor:"pointer"}},sending?"Enviando...":"🔄 Rechazar y reabrir solicitud"))));
 }
 
 // ── CALIFICAR VIEW ────────────────────────────────────────────────────────
@@ -1841,13 +1864,13 @@ function CalificarView({recId, recs, setRecs, loaded}) {
   if(!rec) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
     h('div',{style:{background:"white",borderRadius:20,padding:40,maxWidth:420,width:"100%",textAlign:"center"}},
       h('div',{style:{fontSize:48,marginBottom:16}},"🔍"),
-      h('p',{style:{color:"#64748b"}},"Reclamo no encontrado.")));
+      h('p',{style:{color:"#64748b"}},"Solicitud no encontrada.")));
 
   if(done) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
     h('div',{style:{background:"white",borderRadius:20,padding:40,maxWidth:420,width:"100%",textAlign:"center",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}},
       h('div',{style:{fontSize:64,marginBottom:16}},stars>=4?"🎉":"📨"),
       h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:24,color:"#0f172a",margin:"0 0 12px"}},stars>=4?"¡Gracias por tu calificación!":"Solicitud de reapertura enviada"),
-      h('p',{style:{color:"#64748b",fontSize:15,lineHeight:1.6}},stars>=4?"Tu feedback fue registrado. ¡Nos alegra que el problema haya quedado resuelto!":"El equipo revisará tu solicitud y reabrirá el reclamo si corresponde."),
+      h('p',{style:{color:"#64748b",fontSize:15,lineHeight:1.6}},stars>=4?"Tu feedback fue registrado. ¡Nos alegra que el problema haya quedado resuelto!":"El equipo revisará tu solicitud y reabrirá la solicitud si corresponde."),
       h('p',{style:{color:"#94a3b8",fontSize:13,marginTop:16}},"Podés cerrar esta ventana.")));
 
   const cat = CATS[rec.cat];
@@ -1865,7 +1888,7 @@ function CalificarView({recId, recs, setRecs, loaded}) {
 
   return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",padding:"20px 16px 40px"}},
     h('div',{style:{textAlign:"center",marginBottom:24,paddingTop:20}},
-      h('div',{style:{fontSize:11,letterSpacing:3,color:"#93c5fd",textTransform:"uppercase",marginBottom:8}},"Resolución de Reclamo"),
+      h('div',{style:{fontSize:11,letterSpacing:3,color:"#93c5fd",textTransform:"uppercase",marginBottom:8}},"Resolución de Solicitud"),
       h('h1',{style:{fontFamily:"'Playfair Display',serif",fontSize:26,color:"white",fontWeight:900}},rec.numero),
       h('div',{style:{width:40,height:3,background:"#22c55e",margin:"10px auto 0",borderRadius:2}})),
     h('div',{style:{maxWidth:480,margin:"0 auto"}},
@@ -1913,7 +1936,7 @@ function CalificarView({recId, recs, setRecs, loaded}) {
         // Separador y opción de reabrir siempre visible al pie
         h('div',{style:{marginTop:20,paddingTop:16,borderTop:"1px solid #f1f5f9",textAlign:"center"}},
           h('div',{style:{fontSize:12,color:"#94a3b8",marginBottom:8}},"¿El problema persiste o no quedaste conforme?"),
-          h('button',{onClick:()=>setStars(1),style:{fontSize:13,color:"#f97316",background:"none",border:"none",cursor:"pointer",textDecoration:"underline",fontWeight:600}},"Solicitar reapertura del reclamo")))));
+          h('button',{onClick:()=>setStars(1),style:{fontSize:13,color:"#f97316",background:"none",border:"none",cursor:"pointer",textDecoration:"underline",fontWeight:600}},"Solicitar reapertura de la solicitud")))));
 }
 
 // ── APP ROOT ───────────────────────────────────────────────────────────────
@@ -1997,8 +2020,8 @@ function App() {
           const mensajes={infraestructura:"nuestro equipo de obras revisó y resolvió el inconveniente",mantenimiento:"nuestro equipo de mantenimiento preventivo atendió el problema",limpieza:"nuestro equipo de limpieza atendió la situación",preparacion:"el espacio fue preparado correctamente",servicios:"nuestro equipo de atención al socio gestionó tu consulta",cuotas:"nuestro equipo administrativo resolvió tu consulta"};
           const msgCat=mensajes[r.cat]||"nuestro equipo atendió y resolvió el inconveniente";
           if(r.email) await sendEmail({to:r.email,
-            subject:`[Asturiano]  Tu reclamo fue resuelto — ${r.numero}`,
-            body:`Hola ${r.nombre},\n\nNos alegra informarte que el problema que reportaste en ${r.sector} fue resuelto. ${msgCat}.\n\n${r.descripcionResolucion?"Lo que se hizo:\n"+r.descripcionResolucion+"\n\n":""}Cuando tengas un momento, evaluá si el reclamo ha sido resuelto correctamente y calificá la atención. En caso de no estar conforme podés reabrir el ticket:\n${appUrl}?calificar=${r.id}\n\nGracias por ayudarnos a mejorar el club.\n\n— Equipo de Intendencia Asturiano`});
+            subject:`[Asturiano]  Tu solicitud fue resuelta — ${r.numero}`,
+            body:`Hola ${r.nombre},\n\nNos alegra informarte que el inconveniente que reportaste en ${r.sector} fue resuelto. ${msgCat}.\n\n${r.descripcionResolucion?"Lo que se hizo:\n"+r.descripcionResolucion+"\n\n":""}Cuando tengas un momento, evaluá si la solicitud fue resuelta correctamente y calificá la atención. En caso de no estar conforme podés reabrir el ticket:\n${appUrl}?calificar=${r.id}\n\nGracias por ayudarnos a mejorar el club.\n\n— Equipo de Intendencia Asturiano`});
         }
         setView("validar_ok");
       } else if(rechazarValId){
@@ -2056,11 +2079,11 @@ function App() {
             reabiertaEn:new Date().toISOString(),
             // Keep original createdAt and dates — times don't reset on reopen
             descripcionResolucion:"",
-            comentarios:[...(r.comentarios||[]),{texto:"Reclamo reabierto — requiere revisión. Fechas originales se mantienen.",fecha:new Date().toISOString(),autor:"Sistema"}]};
+            comentarios:[...(r.comentarios||[]),{texto:"Solicitud reabierta — requiere revisión. Fechas originales se mantienen.",fecha:new Date().toISOString(),autor:"Sistema"}]};
           await sbUpsert(updated);
           // Notify responsable
           const respMail = getResponsableMail(r.cat);
-          if(respMail) await sendEmail({to:respMail,subject:`[Asturiano]  Reclamo reabierto — ${r.numero}`,body:`El usuario reabrió el reclamo ${r.numero} (${r.sector}) porque no quedó conforme con la resolución.\n\nRequiere revisión inmediata.`});
+          if(respMail) await sendEmail({to:respMail,subject:`[Asturiano]  Solicitud reabierta — ${r.numero}`,body:`El usuario reabrió la solicitud ${r.numero} (${r.sector}) porque no quedó conforme con la resolución.\n\nRequiere revisión inmediata.`});
           setView("reabrir_ok");
         }
       }
@@ -2101,23 +2124,23 @@ function App() {
     // Notify user when linked to a project
     if(rec.email && prevRec && rec.proyectoVinculadoId && rec.proyectoVinculadoId!==prevRec.proyectoVinculadoId) {
       await sendEmail({to:rec.email,
-        subject:`[Asturiano] Tu reclamo fue vinculado a un proyecto — ${rec.numero}`,
-        body:`Hola ${rec.nombre},\n\nTu reclamo ${rec.numero} (${rec.sector}) fue vinculado al proyecto "${rec.proyectoTitulo}".\n\nEsto significa que el problema que reportaste será resuelto como parte de una obra o proyecto mayor. Recibirás actualizaciones a medida que el proyecto avance.\n\nPodés seguir el estado de tu reclamo:\n${appUrl}?seguimiento=${rec.numero}\n\n— Equipo de Intendencia Asturiano`});
+        subject:`[Asturiano] Tu solicitud fue vinculada a un proyecto — ${rec.numero}`,
+        body:`Hola ${rec.nombre},\n\nTu solicitud ${rec.numero} (${rec.sector}) fue vinculada al proyecto "${rec.proyectoTitulo}".\n\nEsto significa que el inconveniente que reportaste será resuelto como parte de una obra o proyecto mayor. Recibirás actualizaciones a medida que el proyecto avance.\n\nPodés seguir el estado de tu solicitud:\n${appUrl}?seguimiento=${rec.numero}\n\n— Equipo de Intendencia Asturiano`});
     }
     // Notify user when fecha cierre confirmed changes
     if(rec.email && prevRec && rec.fechaCierreConfirmada && prevRec.fechaCierreConfirmada && rec.fechaCierreConfirmada!==prevRec.fechaCierreConfirmada) {
       await sendEmail({to:rec.email,
         subject:`[Asturiano]  Actualización de fecha — ${rec.numero}`,
-        body:`Hola ${rec.nombre},\n\nTe informamos que la fecha estimada de resolución de tu reclamo ${rec.numero} (${rec.sector}) fue actualizada.\n\nNueva fecha estimada: ${fd(rec.fechaCierreConfirmada)}\n${rec.motivoActualizacion?"Motivo: "+rec.motivoActualizacion+"\n":""}\nPodés seguir el estado en:\n${appUrl}?seguimiento=${rec.numero}\n\n— Equipo de Intendencia Asturiano`});
+        body:`Hola ${rec.nombre},\n\nTe informamos que la fecha estimada de resolución de tu solicitud ${rec.numero} (${rec.sector}) fue actualizada.\n\nNueva fecha estimada: ${fd(rec.fechaCierreConfirmada)}\n${rec.motivoActualizacion?"Motivo: "+rec.motivoActualizacion+"\n":""}\nPodés seguir el estado en:\n${appUrl}?seguimiento=${rec.numero}\n\n— Equipo de Intendencia Asturiano`});
     }
     const seguimientoUrl = appUrl+"?seguimiento="+rec.numero;
     // Notificar al usuario cuando intendencia confirma fecha de resolución por primera vez
     if(rec.email && rec.fechaCierreConfirmada && prevRec && !prevRec.fechaCierreConfirmada){
       await sendEmail({to:rec.email,
-        subject:`[Asturiano] Tu reclamo está siendo atendido — ${rec.numero}`,
+        subject:`[Asturiano] Tu solicitud está siendo atendido — ${rec.numero}`,
         body:`Hola ${rec.nombre},
 
-Tu reclamo fue asignado y está siendo atendido por nuestro equipo.
+Tu solicitud fue asignada y está siendo atendido por nuestro equipo.
 
 Número: ${rec.numero}
 Sector: ${rec.sector}
@@ -2237,21 +2260,21 @@ Te avisaremos cuando esté resuelto.
     if(!loaded) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center"}},
       h('div',{style:{textAlign:"center",color:"white"}},
         h('div',{style:{fontSize:40,marginBottom:16}},"🔍"),
-        h('div',{style:{fontSize:18}},"Buscando tu reclamo...")));
+        h('div',{style:{fontSize:18}},"Buscando tu solicitud...")));
     // Always get fresh data from Supabase for this specific reclamo
     const rec = recs.find(r=>r.numero===numSeg);
     if(!rec) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
       h('div',{style:{background:"white",borderRadius:20,padding:40,maxWidth:420,width:"100%",textAlign:"center"}},
         h('div',{style:{fontSize:48,marginBottom:16}},"🔍"),
-        h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:22,margin:"0 0 12px"}},"Reclamo no encontrado"),
-        h('p',{style:{color:"#64748b",fontSize:14}},"No encontramos el reclamo "+numSeg+". Verificá el número e intentá de nuevo."),
-        h('button',{onClick:()=>setView("admin"),style:{marginTop:20,padding:"10px 24px",background:"#0f172a",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:600}},"Consultar otro reclamo")));
+        h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:22,margin:"0 0 12px"}},"Solicitud no encontrada"),
+        h('p',{style:{color:"#64748b",fontSize:14}},"No encontramos la solicitud "+numSeg+". Verificá el número e intentá de nuevo."),
+        h('button',{onClick:()=>setView("admin"),style:{marginTop:20,padding:"10px 24px",background:"#0f172a",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:600}},"Consultar otra solicitud")));
     const cat=CATS[rec.cat]; const pri=PRIS.find(p=>p.id===rec.pri);
     const est=ESTADOS.find(e=>e.id===rec.estadoAvance);
     const appUrl=window.location.href.split("?")[0];
     return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",padding:"20px 16px 40px"}},
       h('div',{style:{textAlign:"center",marginBottom:24,paddingTop:20}},
-        h('div',{style:{fontSize:11,letterSpacing:3,color:"#93c5fd",textTransform:"uppercase",marginBottom:8}},"Seguimiento de Reclamo"),
+        h('div',{style:{fontSize:11,letterSpacing:3,color:"#93c5fd",textTransform:"uppercase",marginBottom:8}},"Seguimiento de Solicitud"),
         h('h1',{style:{fontFamily:"'Playfair Display',serif",fontSize:26,color:"white",fontWeight:900}},rec.numero),
         h('div',{style:{width:40,height:3,background:"#3b82f6",margin:"10px auto 0",borderRadius:2}})),
       h('div',{style:{maxWidth:500,margin:"0 auto"}},
@@ -2278,7 +2301,7 @@ Te avisaremos cuando esté resuelto.
           rec.estadoAvance==="vinculado_proyecto" && rec.proyectoTitulo && h('div',{style:{background:"#f5f3ff",border:"1.5px solid #ddd6fe",borderRadius:12,padding:"14px 16px",marginBottom:16}},
             h('div',{style:{fontSize:11,color:"#5b21b6",fontWeight:700,marginBottom:6,textTransform:"uppercase"}},"🏗️ Vinculado a proyecto"),
             h('div',{style:{fontSize:14,fontWeight:600,color:"#4c1d95",marginBottom:4}},rec.proyectoTitulo),
-            h('div',{style:{fontSize:13,color:"#6d28d9",lineHeight:1.5}},"Tu reclamo será resuelto como parte de este proyecto. Recibirás actualizaciones a medida que avance.")),
+            h('div',{style:{fontSize:13,color:"#6d28d9",lineHeight:1.5}},"Tu solicitud será resuelta como parte de este proyecto. Recibirás actualizaciones a medida que avance.")),
           rec.adjuntos && rec.adjuntos.filter(a=>a.url).length>0 && h('div',{style:{marginBottom:16}},
             h('div',{style:{fontSize:11,color:"#94a3b8",fontWeight:600,marginBottom:8,textTransform:"uppercase"}},"Fotos adjuntas"),
             h('div',{style:{display:"flex",gap:8,flexWrap:"wrap"}},
@@ -2315,7 +2338,6 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
-
 
 
 
