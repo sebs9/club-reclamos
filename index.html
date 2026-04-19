@@ -345,47 +345,57 @@ async function sendEmail({to, cc, subject, body, htmlBody}) {
 
 // ── DUPLICATE DETECTION ──────────────────────────────────────────────────────
 async function detectarDuplicados(nuevoRec, todosRecs) {
-  // First filter by same sector + cat + sub
+  // Candidatos: todas las solicitudes abiertas excepto la misma
   const candidatos = todosRecs.filter(r =>
     r.id !== nuevoRec.id &&
-    r.sector === nuevoRec.sector &&
-    r.cat === nuevoRec.cat &&
-    !["completada","consolidada"].includes(r.estadoAvance)
+    !["completada","consolidada","vinculado_proyecto"].includes(r.estadoAvance) &&
+    r.desc && r.desc.trim().length > 10
   );
   if (candidatos.length === 0) return [];
 
-  // Use AI to compare descriptions
   try {
-    // Only compare descriptions - sector/cat match already filtered
-    const prompt = `Compará la descripción del nueva solicitud con los existentes. Evaluá similitud SOLO por descripción, ignorando sector/categoría que ya coinciden.
+    const prompt = `Sos un asistente que detecta solicitudes duplicadas en un sistema de gestión de un club.
 
-NUEVO RECLAMO [${nuevoRec.numero}]:
-"${nuevoRec.desc}"
+NUEVA SOLICITUD [${nuevoRec.numero}]:
+Sector: ${nuevoRec.sector}
+Tipo: ${nuevoRec.cat} > ${nuevoRec.sub}
+Descripción: "${nuevoRec.desc}"
 
-RECLAMOS EXISTENTES:
-${candidatos.map((r,i)=>`${i+1}. [${r.numero}] "${r.desc}"`).join("\n")}
+SOLICITUDES EXISTENTES ABIERTAS:
+${candidatos.map((r,i)=>`${i+1}. [${r.numero}] Sector: ${r.sector} | Tipo: ${r.cat}>${r.sub} | Descripción: "${r.desc}"`).join("\n")}
 
-Respondé SOLO con JSON válido. Marcá "alta" solo si describen claramente el mismo problema físico. "media" si son parecidos pero pueden ser distintos.
-{"similares": [{"numero": "R-XXXXX", "similitud": "alta|media", "razon": "breve explicación en español", "descExistente": "descripción de la solicitud existente"}]}
-Si no hay similares reales, respondé: {"similares": []}`;
+Tu tarea: identificar si alguna solicitud existente describe CLARAMENTE EL MISMO PROBLEMA FÍSICO que la nueva.
+
+REGLAS ESTRICTAS:
+- Evaluá PRIMERO la descripción. Si las descripciones no coinciden claramente, NO es duplicado aunque el sector y tipo sean iguales.
+- Solo marcá "alta" si estás MUY seguro que es el mismo problema (misma rotura, mismo objeto dañado, misma situación).
+- Si tenés dudas, NO lo incluyas. Es mejor no reportar que reportar falsos positivos.
+- Ignorá similitudes genéricas como "hay un problema" o "no funciona".
+
+Respondé SOLO con JSON válido, sin texto adicional:
+{"similares": [{"numero": "X-XXX-XXX", "razon": "explicación concreta en español de por qué es el mismo problema", "sectorCoincide": true/false, "tipoCoincide": true/false}]}
+Si no hay similares obvios: {"similares": []}`;
 
     const resp = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {"Content-Type":"application/json"},
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
-        max_tokens: 300,
+        max_tokens: 400,
         messages: [{role:"user", content: prompt}]
       })
     });
     const data = await resp.json();
     const text = (data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("");
     const parsed = JSON.parse(text.replace(/```json|```/g,"").trim());
-    return parsed.similares || [];
+    // Solo retornar alta confianza, agregar descExistente para mostrar en UI
+    return (parsed.similares||[]).map(s => {
+      const existing = candidatos.find(r=>r.numero===s.numero);
+      return {...s, similitud:"alta", descExistente: existing?.desc||""};
+    });
   } catch(e) {
     console.error("Duplicate detection error:", e);
-    // Fallback: return candidatos as potentially similar
-    return candidatos.slice(0,3).map(r=>({numero:r.numero, similitud:"media", razon:"Mismo sector y categoría"}));
+    return [];  // En caso de error, no mostrar falsos positivos
   }
 }
 
@@ -905,27 +915,40 @@ Resolución: ${descripcion||"—"}`});
                 h('div',{style:{fontSize:11,color:"#b45309",fontStyle:"italic",marginTop:2}},d.razon)),
               h('div',{style:{display:"flex",gap:6}},
                 h('button',{onClick:async()=>{
-                    // Find the existing reclamo to copy its data
                     const existing = recs.find(r=>r.numero===d.numero);
-                    const updated={
-                      ...rec,
-                      // Copy key fields from existing reclamo
-                      ejecutorMail: existing?.ejecutorMail||rec.ejecutorMail,
-                      ejecutorNombre: existing?.ejecutorNombre||rec.ejecutorNombre,
-                      ejecutorConfirmado: existing?.ejecutorConfirmado||rec.ejecutorConfirmado,
-                      fechaInicioEsperado: existing?.fechaInicioEsperado||rec.fechaInicioEsperado,
-                      fechaCierre: existing?.fechaCierre||rec.fechaCierre,
-                      fechaCierreConfirmada: existing?.fechaCierreConfirmada||rec.fechaCierreConfirmada,
-                      criticidad: existing?.criticidad||rec.criticidad,
-                      estadoAvance: existing?.estadoAvance||rec.estadoAvance,
-                      reclamosHijos:[...(existing?.reclamosHijos||[]),rec.numero],
-                      posiblesDuplicados:rec.posiblesDuplicados.filter(x=>x.numero!==d.numero),
-                      comentarios:[...(rec.comentarios||[]),{texto:"Consolidado con "+d.numero+" — datos copiados automáticamente.",fecha:new Date().toISOString(),autor:"Sistema"}]
+                    if(!existing) return;
+                    // La solicitud "existing" es el PADRE — rec es el hijo que se consolida
+                    // 1. Actualizar el padre: agregar rec.numero a reclamosHijos
+                    const padreActualizado = {
+                      ...existing,
+                      reclamosHijos: [...new Set([...(existing.reclamosHijos||[]), rec.numero])],
+                      comentarios:[...(existing.comentarios||[]),{texto:`Solicitud ${rec.numero} consolidada bajo esta. Mismo problema reportado por ${rec.nombre}.`,fecha:new Date().toISOString(),autor:"Sistema"}]
                     };
-                    await onSave(updated);
-                    if(rec.email) await sendEmail({to:rec.email,
-                      subject:`[Asturiano] Tu solicitud fue consolidada — ${rec.numero}`,
-                      body:`Hola ${rec.nombre},\n\nTu solicitud ${rec.numero} fue consolidada con otra solicitud previa sobre el mismo problema en ${rec.sector}.\n\nAmbos serán resueltos juntos. La fecha estimada de resolución es ${fd(existing?.fechaCierreConfirmada||existing?.fechaCierre)}.\n\n— Equipo de Intendencia Asturiano`});
+                    await onSave(padreActualizado);
+                    // 2. Actualizar el hijo (rec): heredar TODO del padre + marcar como consolidada
+                    const hijoActualizado = {
+                      ...rec,
+                      estadoAvance: "consolidada",
+                      reclamoPadre: existing.numero,
+                      ejecutorMail: existing.ejecutorMail||"",
+                      ejecutorNombre: existing.ejecutorNombre||"",
+                      ejecutorConfirmado: existing.ejecutorConfirmado||false,
+                      ejecutores_lista: existing.ejecutores_lista||[],
+                      fechaInicioEsperado: existing.fechaInicioEsperado||"",
+                      fechaCierre: existing.fechaCierre||"",
+                      fechaCierreConfirmada: existing.fechaCierreConfirmada||"",
+                      criticidad: existing.criticidad||rec.criticidad,
+                      descripcionResolucion: existing.descripcionResolucion||"",
+                      posiblesDuplicados: (rec.posiblesDuplicados||[]).filter(x=>x.numero!==d.numero),
+                      comentarios:[...(rec.comentarios||[]),{texto:`Consolidada con solicitud ${existing.numero}. Será resuelta en conjunto.`,fecha:new Date().toISOString(),autor:"Sistema"}]
+                    };
+                    await onSave(hijoActualizado);
+                    // 3. Notificar al solicitante del hijo
+                    if(rec.email) await sendEmail({
+                      to: rec.email,
+                      subject: `[Asturiano] Tu solicitud fue consolidada — ${rec.numero}`,
+                      body: `Hola ${rec.nombre},\n\nTu solicitud ${rec.numero} (${rec.sector}) fue consolidada con otra solicitud sobre el mismo problema.\n\nAmbas serán resueltas juntas como una sola gestión.${existing.fechaCierreConfirmada?"\n\nFecha estimada de resolución: "+fd(existing.fechaCierreConfirmada):""}${existing.ejecutorNombre?"\nEquipo asignado: "+existing.ejecutorNombre:""}\n\nRecibís las mismas notificaciones de avance. Podés seguir el estado:\n${window.location.href.split("?")[0]}?seguimiento=${rec.numero}\n\n— Equipo de Intendencia Asturiano`
+                    });
                   },
                   style:{padding:"4px 12px",background:"#854d0e",color:"white",border:"none",borderRadius:6,cursor:"pointer",fontSize:11,fontWeight:600}},"✅ Sí, consolidar"),
                 h('button',{onClick:()=>{
@@ -1837,9 +1860,11 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
                 }
                 // Acción adicional solo si agrega info nueva (no repite lo del badge)
                 const acc = getAccionRequerida(r);
+                const dups = (r.posiblesDuplicados||[]).filter(d=>!( r.duplicadosIgnorados||[]).includes(d.numero));
                 return h('div',{style:{display:"flex",flexDirection:"column",gap:4}},
                   confBadge,
-                  acc && h('span',{style:{display:"inline-block",padding:"2px 7px",borderRadius:6,fontSize:10,fontWeight:700,color:acc.color,background:acc.bg,whiteSpace:"nowrap"}},acc.label));
+                  acc && h('span',{style:{display:"inline-block",padding:"2px 7px",borderRadius:6,fontSize:10,fontWeight:700,color:acc.color,background:acc.bg,whiteSpace:"nowrap"}},acc.label),
+                  dups.length > 0 && h('span',{style:{display:"inline-block",padding:"2px 7px",borderRadius:6,fontSize:10,fontWeight:700,color:"#854d0e",background:"#fef9c3",whiteSpace:"nowrap",cursor:"pointer"},onClick:()=>setModal(r)},"🔍 "+dups.length+" posible"+(dups.length>1?"s":"")+" duplicado"+(dups.length>1?"s":"")));
               })()),
               h('td',{style:{padding:"11px 10px"}},(() => {
                 const ee = getEstadoEjecucion(r);
@@ -2193,13 +2218,19 @@ function App() {
             comentarios:[...(r.comentarios||[]),{texto:"Resolución validada por directivo.",fecha:new Date().toISOString(),autor:"Directivo"}]};
           await sbUpsert(updated);
           setRecs(lista.map(x=>x.id===updated.id?updated:x));
-          // Notify user with calificar link
-          const catConf=CATS[r.cat];
           const mensajes={infraestructura:"nuestro equipo de obras revisó y resolvió el inconveniente",mantenimiento:"nuestro equipo de mantenimiento preventivo atendió el problema",limpieza:"nuestro equipo de limpieza atendió la situación",preparacion:"el espacio fue preparado correctamente",servicios:"nuestro equipo de atención al socio gestionó tu consulta",cuotas:"nuestro equipo administrativo resolvió tu consulta"};
           const msgCat=mensajes[r.cat]||"nuestro equipo atendió y resolvió el inconveniente";
+          // Notificar al solicitante padre
           if(r.email) await sendEmail({to:r.email,
             subject:`[Asturiano]  Tu solicitud fue resuelta — ${r.numero}`,
             body:`Hola ${r.nombre},\n\nNos alegra informarte que el inconveniente que reportaste en ${r.sector} fue resuelto. ${msgCat}.\n\n${r.descripcionResolucion?"Lo que se hizo:\n"+r.descripcionResolucion+"\n\n":""}Cuando tengas un momento, evaluá si la solicitud fue resuelta correctamente y calificá la atención. En caso de no estar conforme podés reabrir el ticket:\n${appUrl}?calificar=${r.id}\n\nGracias por ayudarnos a mejorar el club.\n\n— Equipo de Intendencia Asturiano`});
+          // Notificar a todos los hijos consolidados
+          for(const num of (r.reclamosHijos||[])) {
+            const hijo = lista.find(x=>x.numero===num);
+            if(hijo?.email) await sendEmail({to:hijo.email,
+              subject:`[Asturiano]  Tu solicitud fue resuelta — ${hijo.numero}`,
+              body:`Hola ${hijo.nombre},\n\nNos alegra informarte que el inconveniente que reportaste en ${hijo.sector} fue resuelto. ${msgCat}.\n\n${r.descripcionResolucion?"Lo que se hizo:\n"+r.descripcionResolucion+"\n\n":""}Cuando tengas un momento, evaluá si la solicitud fue resuelta correctamente y calificá la atención. En caso de no estar conforme podés reabrir el ticket:\n${appUrl}?calificar=${hijo.id}\n\nGracias por ayudarnos a mejorar el club.\n\n— Equipo de Intendencia Asturiano`});
+          }
         }
         setView("validar_ok");
       } else if(rechazarValId){
@@ -2299,11 +2330,26 @@ function App() {
     setRecs(prev=>prev.map(r=>r.id===rec.id?rec:r));
     await sbUpsert(rec);
     const appUrl = window.location.href.split("?")[0];
+
+    // Helper: notificar a todos los hijos consolidados con el mismo mensaje
+    const notifHijos = async (subject, bodyFn) => {
+      const hijos = (rec.reclamosHijos||[]);
+      for(const num of hijos) {
+        const hijo = recs.find(r=>r.numero===num);
+        if(hijo?.email) {
+          await sendEmail({to:hijo.email, subject, body:bodyFn(hijo)});
+        }
+      }
+    };
     // Notify user when fecha cierre confirmed changes
     if(rec.email && prevRec && rec.fechaCierreConfirmada && prevRec.fechaCierreConfirmada && rec.fechaCierreConfirmada!==prevRec.fechaCierreConfirmada) {
       await sendEmail({to:rec.email,
         subject:`[Asturiano]  Actualización de fecha — ${rec.numero}`,
         body:`Hola ${rec.nombre},\n\nTe informamos que la fecha estimada de resolución de tu solicitud ${rec.numero} (${rec.sector}) fue actualizada.\n\nNueva fecha estimada: ${fd(rec.fechaCierreConfirmada)}\n${rec.motivoActualizacion?"Motivo: "+rec.motivoActualizacion+"\n":""}\nPodés seguir el estado en:\n${appUrl}?seguimiento=${rec.numero}\n\n— Equipo de Intendencia Asturiano`});
+      await notifHijos(
+        `[Asturiano]  Actualización de fecha — {numero}`,
+        hijo=>`Hola ${hijo.nombre},\n\nTe informamos que la fecha estimada de resolución de tu solicitud ${hijo.numero} (${hijo.sector}) fue actualizada.\n\nNueva fecha estimada: ${fd(rec.fechaCierreConfirmada)}\n${rec.motivoActualizacion?"Motivo: "+rec.motivoActualizacion+"\n":""}\nPodés seguir el estado en:\n${appUrl}?seguimiento=${hijo.numero}\n\n— Equipo de Intendencia Asturiano`
+      );
     }
     const seguimientoUrl = appUrl+"?seguimiento="+rec.numero;
     // Notificar al usuario cuando intendencia confirma fecha de resolución por primera vez
@@ -2324,6 +2370,10 @@ ${seguimientoUrl}
 Te avisaremos cuando esté resuelto.
 
 — Equipo de Intendencia Asturiano`});
+      await notifHijos(
+        `[Asturiano] Tu solicitud está siendo atendida — {numero}`,
+        hijo=>`Hola ${hijo.nombre},\n\nTu solicitud ${hijo.numero} (${hijo.sector}) está siendo atendida por nuestro equipo junto con otra solicitud sobre el mismo problema.\n\nFecha tentativa de resolución: ${fd(rec.fechaCierreConfirmada)}\n\nSeguí el estado:\n${appUrl}?seguimiento=${hijo.numero}\n\n— Equipo de Intendencia Asturiano`
+      );
     }
     // Resolution email is handled by notifResolucionAuto in EditModal save
   };
@@ -2510,6 +2560,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
+
 
 
 
