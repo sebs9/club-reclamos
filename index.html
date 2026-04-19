@@ -199,20 +199,44 @@ function getAccionRequerida(r) {
 function getEstadoEjecucion(r) {
   // No hay fecha de inicio → no mostrar nada
   if (!r.fechaInicioEsperado && !r.fechaInicioOriginal) return null;
-  const ahora = new Date();
-  ahora.setHours(0,0,0,0);
+
+  const ahora = new Date(); ahora.setHours(0,0,0,0);
   const inicio = new Date(r.fechaInicioEsperado || r.fechaInicioOriginal);
   inicio.setHours(0,0,0,0);
   const cierreStr = r.fechaOriginalCierre || r.fechaCierre;
   const cierre = cierreStr ? new Date(cierreStr) : null;
   if (cierre) cierre.setHours(0,0,0,0);
 
-  if (r.ejecutorConfirmado && r.estadoAvance === "completada")
+  // Completada
+  if (r.estadoAvance === "completada")
     return { label: "Completada", color: "#15803d", bg: "#f0fdf4" };
-  if (cierre && ahora > cierre && r.estadoAvance !== "completada")
-    return { label: "Demorada", color: "#dc2626", bg: "#fef2f2" };
-  if (ahora >= inicio)
-    return { label: "En curso", color: "#3b82f6", bg: "#eff6ff" };
+
+  const lista = r.ejecutores_lista || [];
+  const tieneEjecutor = lista.length > 0 ? true : !!(r.ejecutorMail?.trim());
+  const todosRechazaron = lista.length > 0
+    ? lista.every(ej => ej.rechazado === true)
+    : !!r.ejecutorRechazado;
+  const alguienConfirmo = lista.length > 0
+    ? lista.some(ej => ej.confirmado === true && !ej.rechazado)
+    : !!r.ejecutorConfirmado;
+
+  const fechaActiva = ahora >= inicio;
+  const demorada = cierre && ahora > cierre;
+
+  if (fechaActiva || demorada) {
+    if (!tieneEjecutor)
+      return { label: "🚨 Sin asignar", color: "#dc2626", bg: "#fef2f2" };
+    if (todosRechazaron)
+      return { label: "🚨 Sin ejecutor activo", color: "#dc2626", bg: "#fef2f2" };
+    if (!alguienConfirmo)
+      return demorada
+        ? { label: "⚠️ Demorada — sin confirmar", color: "#dc2626", bg: "#fef2f2" }
+        : { label: "⏳ Pend. confirmación", color: "#d97706", bg: "#fffbeb" };
+    return demorada
+      ? { label: "⚠️ Demorada", color: "#dc2626", bg: "#fef2f2" }
+      : { label: "✅ En curso", color: "#3b82f6", bg: "#eff6ff" };
+  }
+
   return { label: "No iniciada", color: "#6b7280", bg: "#f8fafc" };
 }
 const ls = {
