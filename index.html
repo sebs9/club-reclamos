@@ -358,22 +358,23 @@ async function detectarDuplicados(nuevoRec, todosRecs) {
 
 NUEVA SOLICITUD [${nuevoRec.numero}]:
 Sector: ${nuevoRec.sector}
-Tipo: ${nuevoRec.cat} > ${nuevoRec.sub}
 Descripción: "${nuevoRec.desc}"
 
 SOLICITUDES EXISTENTES ABIERTAS:
-${candidatos.map((r,i)=>`${i+1}. [${r.numero}] Sector: ${r.sector} | Tipo: ${r.cat}>${r.sub} | Descripción: "${r.desc}"`).join("\n")}
+${candidatos.map((r,i)=>`${i+1}. [${r.numero}] Sector: ${r.sector} | Descripción: "${r.desc}"`).join("\n")}
 
 Tu tarea: identificar si alguna solicitud existente describe CLARAMENTE EL MISMO PROBLEMA FÍSICO que la nueva.
 
 REGLAS ESTRICTAS:
-- Evaluá PRIMERO la descripción. Si las descripciones no coinciden claramente, NO es duplicado aunque el sector y tipo sean iguales.
-- Solo marcá "alta" si estás MUY seguro que es el mismo problema (misma rotura, mismo objeto dañado, misma situación).
-- Si tenés dudas, NO lo incluyas. Es mejor no reportar que reportar falsos positivos.
-- Ignorá similitudes genéricas como "hay un problema" o "no funciona".
+- Evaluá PRIMERO la descripción. Si las descripciones apuntan al mismo problema concreto, es candidato.
+- El sector es una señal de apoyo: si coincide, aumenta la confianza. Pero NO es requisito.
+- El tipo de problema (categoría) NO importa — ignoralo completamente. Una solicitud de "limpieza" y otra de "mantenimiento" pueden ser el mismo problema.
+- Solo reportá si estás MUY seguro. Si tenés la mínima duda, no lo incluyas.
+- Ejemplos de duplicado obvio: "las mesas están muy sucias" y "hay que limpiar las mesas" → mismo problema aunque sean categorías distintas.
+- Ejemplos de NO duplicado: "la pileta tiene una gotera" y "la pileta está sucia" → problemas distintos aunque mismo sector.
 
 Respondé SOLO con JSON válido, sin texto adicional:
-{"similares": [{"numero": "X-XXX-XXX", "razon": "explicación concreta en español de por qué es el mismo problema", "sectorCoincide": true/false, "tipoCoincide": true/false}]}
+{"similares": [{"numero": "X-XXX-XXX", "razon": "explicación concreta de por qué es el mismo problema", "sectorCoincide": true/false}]}
 Si no hay similares obvios: {"similares": []}`;
 
     const resp = await fetch("https://api.anthropic.com/v1/messages", {
@@ -1275,6 +1276,72 @@ function PanelConfig({onClose, onSaveEjecutores}) {
         h('button',{onClick:save,style:{width:"100%",padding:"13px",background:saved?"#22c55e":"linear-gradient(135deg,#0f172a,#1e3a5f)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700,transition:"background 0.3s",marginTop:20}},saved?"✅ Guardado":"Guardar configuración"))));
 }
 
+// ── MODAL DUPLICADO ────────────────────────────────────────────────────────
+function ModalDuplicado({hijo, padre, onConsolidar, onDescartar, onClose}) {
+  const catHijo = CATS[hijo.cat];
+  const catPadre = CATS[padre.cat];
+  const cardStyle = {background:"#f8fafc",borderRadius:12,padding:"16px 18px",flex:1};
+  const labelStyle = {fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:0.5,marginBottom:4};
+  const valStyle = {fontSize:13,color:"#1e293b",lineHeight:1.5};
+
+  return h('div',{style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2000,padding:20}},
+    h('div',{style:{background:"white",borderRadius:20,width:"100%",maxWidth:680,maxHeight:"90vh",overflowY:"auto"}},
+      // Header
+      h('div',{style:{background:"#854d0e",padding:"16px 22px",borderRadius:"20px 20px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center"}},
+        h('div',null,
+          h('div',{style:{fontSize:11,color:"#fde68a",letterSpacing:2,textTransform:"uppercase",marginBottom:2}},"Posible consolidación detectada"),
+          h('div',{style:{color:"white",fontSize:17,fontWeight:700}},"¿Son el mismo problema?")),
+        h('button',{onClick:onClose,style:{background:"none",border:"none",color:"rgba(255,255,255,0.7)",fontSize:22,cursor:"pointer"}},"✕")),
+      h('div',{style:{padding:"20px 22px"}},
+        // Comparación lado a lado
+        h('div',{style:{display:"flex",gap:14,marginBottom:20}},
+          // Solicitud nueva (hijo)
+          h('div',{style:{...cardStyle,border:"2px solid #fde68a"}},
+            h('div',{style:{fontSize:11,fontWeight:700,color:"#854d0e",marginBottom:10,textTransform:"uppercase"}},"🆕 Solicitud nueva"),
+            h('div',{style:{fontFamily:"monospace",fontSize:12,fontWeight:700,color:"#92400e",marginBottom:10}},hijo.numero),
+            h('div',{style:{marginBottom:8}},
+              h('div',{style:labelStyle},"Sector"),
+              h('div',{style:valStyle},hijo.sector)),
+            h('div',{style:{marginBottom:8}},
+              h('div',{style:labelStyle},"Tipo de problema"),
+              h('div',{style:valStyle},catHijo?.icon+" "+catHijo?.label+" › "+hijo.sub)),
+            h('div',{style:{marginBottom:8}},
+              h('div',{style:labelStyle},"Descripción"),
+              h('div',{style:{...valStyle,background:"#fffbeb",borderRadius:8,padding:"8px 10px",fontStyle:"italic"}},'"'+hijo.desc+'"')),
+            h('div',null,
+              h('div',{style:labelStyle},"Solicitante"),
+              h('div',{style:valStyle},hijo.nombre+" ("+hijo.tipo+")"))),
+          // Solicitud existente (padre)
+          h('div',{style:{...cardStyle,border:"2px solid #bfdbfe"}},
+            h('div',{style:{fontSize:11,fontWeight:700,color:"#1d4ed8",marginBottom:10,textTransform:"uppercase"}},"📋 Solicitud existente"),
+            h('div',{style:{fontFamily:"monospace",fontSize:12,fontWeight:700,color:"#1d4ed8",marginBottom:10}},padre.numero),
+            h('div',{style:{marginBottom:8}},
+              h('div',{style:labelStyle},"Sector"),
+              h('div',{style:valStyle},padre.sector)),
+            h('div',{style:{marginBottom:8}},
+              h('div',{style:labelStyle},"Tipo de problema"),
+              h('div',{style:valStyle},catPadre?.icon+" "+catPadre?.label+" › "+padre.sub)),
+            h('div',{style:{marginBottom:8}},
+              h('div',{style:labelStyle},"Descripción"),
+              h('div',{style:{...valStyle,background:"#eff6ff",borderRadius:8,padding:"8px 10px",fontStyle:"italic"}},'"'+padre.desc+'"')),
+            h('div',null,
+              h('div',{style:labelStyle},"Solicitante"),
+              h('div',{style:valStyle},padre.nombre+" ("+padre.tipo+")")))),
+        // Estado del padre si ya tiene gestión
+        (padre.ejecutorNombre || padre.fechaCierreConfirmada) && h('div',{style:{background:"#f0fdf4",border:"1.5px solid #bbf7d0",borderRadius:10,padding:"10px 14px",marginBottom:16,fontSize:13}},
+          h('div',{style:{fontWeight:700,color:"#15803d",marginBottom:4}},"✅ La solicitud existente ya tiene gestión asignada"),
+          padre.ejecutorNombre && h('div',{style:{color:"#166534"}},"Ejecutor: "+padre.ejecutorNombre),
+          padre.fechaCierreConfirmada && h('div',{style:{color:"#166534"}},"Fecha de resolución: "+fd(padre.fechaCierreConfirmada))),
+        // Botones — sin predeterminado
+        h('div',{style:{display:"flex",gap:10}},
+          h('button',{onClick:onDescartar,
+            style:{flex:1,padding:"13px",background:"white",color:"#64748b",border:"2px solid #e2e8f0",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:600}},
+            "No son el mismo problema"),
+          h('button',{onClick:onConsolidar,
+            style:{flex:1,padding:"13px",background:"linear-gradient(135deg,#854d0e,#92400e)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700}},
+            "✅ Sí, consolidar como sub-ticket")))));
+}
+
 // ── KANBAN ─────────────────────────────────────────────────────────────────
 function Kanban({recs, onEdit}) {
   return h('div',{style:{display:"flex",gap:14,overflowX:"auto",padding:"0 24px 24px",alignItems:"flex-start"}},
@@ -1624,6 +1691,7 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
   },[]);
   const [filtros,setFiltros] = useState({estado:"",cat:"",sector:"",q:""});
   const [modal,setModal] = useState(null);
+  const [modalDup,setModalDup] = useState(null); // {hijo, padre}
   const [view,setView] = useState("lista");
   const [mainTab,setMainTab] = useState("reclamos");
   const [showCfg,setShowCfg] = useState(false);
@@ -1631,6 +1699,8 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
   const sf = (k,v) => setFiltros(f=>({...f,[k]:v}));
 
   const filtrados = recs.filter(r=>{
+    // Ocultar consolidadas (sub-tickets) del panel principal
+    if(r.estadoAvance==="consolidada" && !filtros.estado) return false;
     if(filtros.estado&&r.estadoAvance!==filtros.estado) return false;
     if(filtros.cat&&r.cat!==filtros.cat) return false;
     if(filtros.sector&&r.sector!==filtros.sector) return false;
@@ -1792,7 +1862,7 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
                 esVinculado && h('div',{style:{fontSize:10,color:"#7c3aed",fontWeight:600,marginTop:2,whiteSpace:"nowrap"}},
                   "🏗️ "+(r.proyectoTitulo||"Proyecto")),
                 !esVinculado && r.reclamosHijos?.length > 0 && h('div',{style:{fontSize:10,color:"#8b5cf6",fontWeight:600,marginTop:2}},
-                  "🔗 "+(r.reclamosHijos.length+1)+" reclamos")),
+                  "🔗 "+r.reclamosHijos.length+" sub-ticket"+(r.reclamosHijos.length>1?"s":""))),
               h('td',{style:{padding:"11px 10px",fontSize:11,color:"#64748b",whiteSpace:"nowrap"}},fd(r.createdAt)),
               h('td',{style:{padding:"11px 10px",fontSize:12,maxWidth:110}},
                 h('div',{style:{fontWeight:600,color:"#1e293b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},r.nombre||"—"),
@@ -1864,7 +1934,13 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
                 return h('div',{style:{display:"flex",flexDirection:"column",gap:4}},
                   confBadge,
                   acc && h('span',{style:{display:"inline-block",padding:"2px 7px",borderRadius:6,fontSize:10,fontWeight:700,color:acc.color,background:acc.bg,whiteSpace:"nowrap"}},acc.label),
-                  dups.length > 0 && h('span',{style:{display:"inline-block",padding:"2px 7px",borderRadius:6,fontSize:10,fontWeight:700,color:"#854d0e",background:"#fef9c3",whiteSpace:"nowrap",cursor:"pointer"},onClick:()=>setModal(r)},"🔍 "+dups.length+" posible"+(dups.length>1?"s":"")+" duplicado"+(dups.length>1?"s":"")));
+                  dups.length > 0 && h('span',{style:{display:"inline-block",padding:"2px 7px",borderRadius:6,fontSize:10,fontWeight:700,color:"#854d0e",background:"#fef9c3",whiteSpace:"nowrap",cursor:"pointer"},
+                    onClick:(e)=>{
+                      e.stopPropagation();
+                      const padre = recs.find(x=>x.numero===dups[0].numero);
+                      if(padre) setModalDup({hijo:r, padre, dup:dups[0]});
+                    }},
+                    "🔍 "+dups.length+" posible"+(dups.length>1?"s":"")+" duplicado"+(dups.length>1?"s":"")));
               })()),
               h('td',{style:{padding:"11px 10px"}},(() => {
                 const ee = getEstadoEjecucion(r);
@@ -1889,7 +1965,51 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
     mainTab==="reclamos" && view==="kanban" && h(Kanban,{recs:filtrados,onEdit:setModal}),
     mainTab==="proyectos" && h(ProyectosTab,{recs,onUpdate,ejecutores}),
     modal && h(EditModal,{rec:modal,onClose:()=>setModal(null),onSave:async u=>{await onUpdate(u,modal);setModal(null);},ejecutores}),
-    showCfg && h(PanelConfig,{onClose:()=>setShowCfg(false),onSaveEjecutores:ejs=>{setEjecutores(ejs);setShowCfg(false);}}));
+    showCfg && h(PanelConfig,{onClose:()=>setShowCfg(false),onSaveEjecutores:ejs=>{setEjecutores(ejs);setShowCfg(false);}}),
+    modalDup && h(ModalDuplicado,{
+      hijo: modalDup.hijo,
+      padre: modalDup.padre,
+      onClose: ()=>setModalDup(null),
+      onDescartar: async()=>{
+        // Marcar como ignorado para no volver a mostrar
+        const hijoUpd = {...modalDup.hijo,
+          posiblesDuplicados:(modalDup.hijo.posiblesDuplicados||[]).filter(x=>x.numero!==modalDup.padre.numero),
+          duplicadosIgnorados:[...(modalDup.hijo.duplicadosIgnorados||[]),modalDup.padre.numero]};
+        await onUpdate(hijoUpd, modalDup.hijo);
+        setModalDup(null);
+      },
+      onConsolidar: async()=>{
+        const {hijo, padre} = modalDup;
+        const appUrl = window.location.href.split("?")[0];
+        // 1. Actualizar padre: agregar hijo a reclamosHijos
+        const padreUpd = {...padre,
+          reclamosHijos:[...new Set([...(padre.reclamosHijos||[]),hijo.numero])],
+          posiblesDuplicados:(padre.posiblesDuplicados||[]).filter(x=>x.numero!==hijo.numero),
+          comentarios:[...(padre.comentarios||[]),{texto:`Sub-ticket ${hijo.numero} consolidado. Mismo problema reportado por ${hijo.nombre}.`,fecha:new Date().toISOString(),autor:"Sistema"}]};
+        await onUpdate(padreUpd, padre);
+        // 2. Actualizar hijo: heredar todo del padre + marcar consolidada
+        const hijoUpd = {...hijo,
+          estadoAvance:"consolidada",
+          reclamoPadre:padre.numero,
+          ejecutorMail:padre.ejecutorMail||"",
+          ejecutorNombre:padre.ejecutorNombre||"",
+          ejecutorConfirmado:padre.ejecutorConfirmado||false,
+          ejecutores_lista:padre.ejecutores_lista||[],
+          fechaInicioEsperado:padre.fechaInicioEsperado||"",
+          fechaCierre:padre.fechaCierre||"",
+          fechaCierreConfirmada:padre.fechaCierreConfirmada||"",
+          criticidad:padre.criticidad||hijo.criticidad,
+          descripcionResolucion:padre.descripcionResolucion||"",
+          posiblesDuplicados:[],
+          comentarios:[...(hijo.comentarios||[]),{texto:`Consolidada como sub-ticket de ${padre.numero}. Será resuelta en conjunto.`,fecha:new Date().toISOString(),autor:"Sistema"}]};
+        await onUpdate(hijoUpd, hijo);
+        // 3. Notificar al solicitante del hijo
+        if(hijo.email) await sendEmail({to:hijo.email,
+          subject:`[Asturiano] Tu solicitud fue consolidada — ${hijo.numero}`,
+          body:`Hola ${hijo.nombre},\n\nTu solicitud ${hijo.numero} (${hijo.sector}) fue consolidada con otra solicitud sobre el mismo problema.\n\nAmbas serán resueltas juntas como una sola gestión.${padre.fechaCierreConfirmada?"\n\nFecha estimada de resolución: "+fd(padre.fechaCierreConfirmada):""}${padre.ejecutorNombre?"\nEquipo asignado: "+padre.ejecutorNombre:""}\n\nRecibís las mismas notificaciones de avance. Podés seguir el estado:\n${appUrl}?seguimiento=${hijo.numero}\n\n— Equipo de Intendencia Asturiano`});
+        setModalDup(null);
+      }
+    }));
 }
 
 // ── LOGIN ──────────────────────────────────────────────────────────────────
@@ -2560,9 +2680,6 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
-
-
-
 
 
 
