@@ -229,11 +229,13 @@ const fd  = iso => {
 };
 const fdt = iso => iso ? new Date(iso).toLocaleString("es-AR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}) : "—";
 const hoy = () => { const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); };
+// Parsea un string YYYY-MM-DD como fecha LOCAL (sin corrimiento UTC/timezone)
+const pld = iso => { if(!iso) return new Date(NaN); const p=iso.split("T")[0].split("-"); return new Date(Number(p[0]),Number(p[1])-1,Number(p[2])); };
 
 function getTiming(r) {
   if (["completada","consolidada","sin_resolucion","vinculado_proyecto"].includes(r.estadoAvance)) return null;
   if (!r.fechaCierre) return null;
-  const d = (new Date(r.fechaCierre) - new Date()) / 86400000;
+  const d = (pld(r.fechaCierre) - new Date()) / 86400000;
   if (d < 0)  return {label:"Vencido",    color:"#ef4444", bg:"#fef2f2"};
   if (d < 1)  return {label:"Vence hoy",  color:"#f97316", bg:"#fff7ed"};
   if (d < 5)  return {label:"Por vencer", color:"#eab308", bg:"#fefce8"};
@@ -262,10 +264,10 @@ function getEstadoEjecucion(r) {
   if (!r.fechaInicioEsperado && !r.fechaInicioOriginal) return null;
 
   const ahora = new Date(); ahora.setHours(0,0,0,0);
-  const inicio = new Date(r.fechaInicioEsperado || r.fechaInicioOriginal);
+  const inicio = pld(r.fechaInicioEsperado || r.fechaInicioOriginal);
   inicio.setHours(0,0,0,0);
   const cierreStr = r.fechaOriginalCierre || r.fechaCierre;
-  const cierre = cierreStr ? new Date(cierreStr) : null;
+  const cierre = cierreStr ? pld(cierreStr) : null;
   if (cierre) cierre.setHours(0,0,0,0);
 
   // Completada
@@ -726,7 +728,7 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs}) {
       // Block save if fechaCierre is in the past without updated date (unless completada)
       if(f.estadoAvance !== "completada") {
         const fechaEfectiva = f.fechaCierreActualizada || f.fechaCierre || rec.fechaOriginalCierre;
-        if(fechaEfectiva && new Date(fechaEfectiva) < new Date() && !f.fechaCierreActualizada && !f.motivoActualizacion?.trim()) {
+        if(fechaEfectiva && pld(fechaEfectiva) < new Date() && !f.fechaCierreActualizada && !f.motivoActualizacion?.trim()) {
           setSaveErr("La fecha de cierre está vencida. Debés ingresar una nueva fecha y el motivo del cambio.");
           setTab("gestion");
           return;
@@ -839,8 +841,8 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs}) {
       // Don't auto-change if already in terminal/special states
       if(["completada","consolidada","esperando_validacion","vinculado_proyecto","sin_resolucion"].includes(f.estadoAvance)) return f.estadoAvance;
       const ahora = new Date();
-      const fechaInicio = new Date(f.fechaInicioEsperado||f.fechaInicioActualizada||"");
-      const fechaCierreEfectiva = new Date(f.fechaCierreActualizada||f.fechaCierre||"");
+      const fechaInicio = pld(f.fechaInicioEsperado||f.fechaInicioActualizada||"");
+      const fechaCierreEfectiva = pld(f.fechaCierreActualizada||f.fechaCierre||"");
       // No executor assigned yet
       if(!f.ejecutorMail || f.ejecutorMail.trim()==="") return "bajo_analisis";
       // Has executor but no dates
@@ -1131,7 +1133,7 @@ Resolución: ${descripcion||"—"}`});
               : h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}},
                   h('div',null,h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Inicio esperado *"),h('input',{type:"date",value:f.fechaInicioEsperado,onChange:e=>set("fechaInicioEsperado",e.target.value),min:hoy(),style:aS()})),
                   h('div',null,h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Cierre esperado *"),h('input',{type:"date",value:f.fechaCierre,onChange:e=>set("fechaCierre",e.target.value),min:f.fechaInicioEsperado||hoy(),style:aS()}))),
-          f.fechaInicioEsperado && f.fechaCierre && (new Date(f.fechaCierre)-new Date(f.fechaInicioEsperado))/86400000 > 30 && h('div',{style:{background:"#fff7ed",border:"1.5px solid #fed7aa",borderRadius:8,padding:"8px 12px",marginBottom:8,fontSize:12,color:"#92400e"}},"⚠️ Esta tarea tiene más de 30 días de duración. Asegurate de que sea necesario."),
+          f.fechaInicioEsperado && f.fechaCierre && (pld(f.fechaCierre)-pld(f.fechaInicioEsperado))/86400000 > 30 && h('div',{style:{background:"#fff7ed",border:"1.5px solid #fed7aa",borderRadius:8,padding:"8px 12px",marginBottom:8,fontSize:12,color:"#92400e"}},"⚠️ Esta tarea tiene más de 30 días de duración. Asegurate de que sea necesario."),
 
           // Same-day: show time fields
           f.fechaInicioEsperado && f.fechaCierre && f.fechaInicioEsperado===f.fechaCierre && h('div',{style:{background:"#f0fdf4",border:"1.5px solid #bbf7d0",borderRadius:10,padding:12,marginBottom:8}},
@@ -1694,7 +1696,7 @@ function ProyectosTab({recs, onUpdate, ejecutores}) {
     const fechaFinNueva = p.fechaFin;
     let fechaExtendidaMas7 = false;
     if(fechaFinAnterior && fechaFinNueva && fechaFinNueva !== fechaFinAnterior) {
-      const diffDias = (new Date(fechaFinNueva) - new Date(fechaFinAnterior)) / 86400000;
+      const diffDias = (pld(fechaFinNueva) - pld(fechaFinAnterior)) / 86400000;
       if(diffDias > 7) fechaExtendidaMas7 = true;
     }
 
@@ -1763,8 +1765,8 @@ function ProyectosTab({recs, onUpdate, ejecutores}) {
         await sendEmail({to:rec.email,
           subject:`[Asturiano] Actualización de fecha — Proyecto "${p.titulo}" — ${rec.numero}`,
           body:`Hola ${rec.nombre},\n\nEl proyecto "${p.titulo}", al que está vinculada tu solicitud ${rec.numero} (${rec.sector}), tiene una nueva fecha estimada de resolución.\n\n` +
-          `📅 Fecha anterior: ${new Date(fechaFinAnterior).toLocaleDateString("es-AR")}\n` +
-          `🏁 Nueva fecha estimada: ${new Date(fechaFinNueva).toLocaleDateString("es-AR")}\n\n` +
+          `📅 Fecha anterior: ${pld(fechaFinAnterior).toLocaleDateString("es-AR")}\n` +
+          `🏁 Nueva fecha estimada: ${pld(fechaFinNueva).toLocaleDateString("es-AR")}\n\n` +
           `Lamentamos el inconveniente. Te avisaremos cuando el proyecto sea completado.\n\nSeguí el estado de tu solicitud:\n${appUrl}?seguimiento=${rec.numero}\n\n— Equipo de Intendencia Asturiano`
         });
       }
@@ -1855,7 +1857,7 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
     total:recs.length,
     noIniciadas:recs.filter(r=>r.estadoAvance==="bajo_analisis").length,
     enCurso:recs.filter(r=>r.estadoAvance==="iniciada").length,
-    demoradas:recs.filter(r=>r.estadoAvance==="demorada"||(!["completada","consolidada","sin_resolucion","vinculado_proyecto"].includes(r.estadoAvance)&&r.fechaCierre&&new Date(r.fechaCierre)<new Date())).length,
+    demoradas:recs.filter(r=>r.estadoAvance==="demorada"||(!["completada","consolidada","sin_resolucion","vinculado_proyecto"].includes(r.estadoAvance)&&r.fechaCierre&&pld(r.fechaCierre)<new Date())).length,
     completadas:recs.filter(r=>r.estadoAvance==="completada").length,
   };
 
@@ -1910,7 +1912,7 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
 
       // CASO 3: Fecha de cierre excedida → marcar demorada
       const fechaCierre = r.fechaCierreActualizada || r.fechaCierre;
-      if (fechaCierre && !diasOverride && new Date(fechaCierre)<ahora && r.estadoAvance!=="demorada") {
+      if (fechaCierre && !diasOverride && pld(fechaCierre)<ahora && r.estadoAvance!=="demorada") {
         const updated={...r,estadoAvance:"demorada",comentarios:[...(r.comentarios||[]),{texto:"Marcada automáticamente como demorada.",fecha:ahora.toISOString(),autor:"Sistema"}]};
         await sbUpsert(updated);
         actualizados=actualizados.map(x=>x.id===r.id?updated:x);
@@ -1921,7 +1923,7 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
       // CASO 4: Recordatorio al ejecutor cuando llega fecha inicio
       const fechaInicio = r.fechaInicioActualizada || r.fechaInicioEsperado;
       if(r.ejecutorConfirmado && r.ejecutorMail && fechaInicio &&
-         !diasOverride && new Date(fechaInicio)<=ahora && r.estadoAvance==="bajo_analisis"){
+         !diasOverride && pld(fechaInicio)<=ahora && r.estadoAvance==="bajo_analisis"){
         await sendEmail({to:[r.ejecutorMail], subject:`[Asturiano]  Tu tarea empieza hoy — ${r.numero}`, body:`Hola ${r.ejecutorNombre},\n\nLa tarea ${r.numero} debería iniciarse hoy.\n\nSector: ${r.sector}\nDescripción: ${r.desc}\n\nCuando termines confirmá la resolución:\n${appUrl}?completar=${r.id}`});
         enviados++;
       }
@@ -2506,7 +2508,7 @@ function App() {
             const now = new Date().toISOString().replace(/[-:]/g,"").split(".")[0]+"Z";
             const isSameDay = s === e2;
             // Calcular día siguiente a fecha de cierre para DTEND all-day (iCal exclusive end)
-            const e2obj = new Date(r.fechaCierre||r.fechaInicioEsperado);
+            const e2obj = pld(r.fechaCierre||r.fechaInicioEsperado);
             e2obj.setDate(e2obj.getDate()+1);
             const e2next = e2obj.toISOString().split("T")[0].replace(/-/g,"");
             let dtStart, dtEnd, dtEndReminder;
