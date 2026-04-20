@@ -725,10 +725,12 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs}) {
     const isConsolidando = (f.reclamosHijos||[]).length > 0 || (rec.reclamosHijos||[]).length > 0 || f.estadoAvance==="consolidada";
     const isSinResolucion = f.estadoAvance==="sin_resolucion";
     if(!isVinculado && !isConsolidando && !isSinResolucion) {
-      if(!f.ejecutorMail) { setSaveErr("Debés asignar un ejecutor antes de guardar."); return; }
+      if(!f.ejecutorMail && f.estadoAvance !== "sin_resolucion") { setSaveErr("Debés asignar un ejecutor antes de guardar."); return; }
       if(f.ejecutorMail && !f.nuevoComentario.trim() && !rec.comentarios?.some(c=>c.autor==="Intendencia")) { setSaveErr("El comentario para el ejecutor es obligatorio."); setTab("gestion"); return; }
-      if(!f.fechaInicioEsperado && !rec.fechaInicioOriginal) { setSaveErr("La fecha de inicio es obligatoria."); return; }
-      if(!f.fechaCierre && !rec.fechaOriginalCierre) { setSaveErr("La fecha de cierre es obligatoria."); return; }
+      if(f.estadoAvance !== "sin_resolucion") {
+        if(!f.fechaInicioEsperado && !rec.fechaInicioOriginal) { setSaveErr("La fecha de inicio es obligatoria."); return; }
+        if(!f.fechaCierre && !rec.fechaOriginalCierre) { setSaveErr("La fecha de cierre es obligatoria."); return; }
+      }
       // Block save if fechaCierre is in the past without updated date (unless completada)
       if(f.estadoAvance !== "completada") {
         const fechaEfectiva = f.fechaCierreActualizada || f.fechaCierre || rec.fechaOriginalCierre;
@@ -2907,4 +2909,3 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
-
