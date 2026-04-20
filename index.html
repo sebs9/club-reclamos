@@ -392,13 +392,14 @@ async function sbClearAll() {
 }
 
 // ── EMAIL ──────────────────────────────────────────────────────────────────
-async function sendEmail({to, cc, subject, body, htmlBody}) {
+async function sendEmail({to, cc, subject, body, htmlBody, icsData}) {
   const cfg = ls.get("config") || {};
   const url = cfg.scriptUrl || SCRIPT_URL;
   const toArr = (Array.isArray(to)?to:[to]).filter(Boolean);
   const ccArr = cc?(Array.isArray(cc)?cc:[cc]).filter(Boolean):[];
   try {
     const payload = {to:toArr,cc:ccArr,subject,body:body||"",htmlBody:htmlBody||null};
+    if(icsData) payload.icsData = icsData;
     const r = await fetch(url, {method:"POST", headers:{"Content-Type":"text/plain"}, body:JSON.stringify(payload)});
     const d = await r.json();
     console.log("Email:", d);
@@ -905,32 +906,90 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs}) {
           body:`Hola ${hijo.nombre},\n\nTu solicitud ${hijo.numero} (${hijo.sector}) fue consolidada con otra solicitud sobre el mismo problema.\n\nAmbas serán resueltas juntas.${padre.fechaCierreConfirmada?"\n\nFecha estimada de resolución: "+fd(padre.fechaCierreConfirmada):""}${padre.ejecutorNombre?"\nEquipo asignado: "+padre.ejecutorNombre:""}\n\nSeguí el estado:\n${appUrl}?seguimiento=${hijo.numero}\n\n— Equipo de Intendencia Asturiano`});
       }
     }
-    // Si está reabierta y se asignó nueva fecha → notificar al ejecutor
-    if(rec.reabierta && f.fechaCierreActualizada && f.fechaCierreActualizada !== rec.fechaCierreActualizada) {
+    // ── REPROGRAMACIÓN DE FECHAS ──────────────────────────────────────────
+    // Detectar si hubo cambio de fecha o de hora por parte del responsable
+    {
       const appUrl = window.location.href.split("?")[0];
-      const ejMails = (f.ejecutores_lista||[]).filter(ej=>ej.mail&&!ej.mail.includes("externo")&&!ej.rechazado).map(ej=>ej.mail);
-      if(!ejMails.length && rec.ejecutorMail && !rec.ejecutorMail.includes("externo")) ejMails.push(rec.ejecutorMail);
-      const fechaInicioNueva = f.fechaInicioActualizada || f.fechaInicioEsperado || rec.fechaInicioOriginal || "";
-      const fechaCierreNueva = f.fechaCierreActualizada;
-      const sDate = fechaInicioNueva.replace(/-/g,"");
-      const eDate = fechaCierreNueva.replace(/-/g,"");
-      const calTitle = encodeURIComponent("Tarea (nueva fecha) "+rec.sector+" — "+rec.numero);
-      const calDesc  = encodeURIComponent("Tarea reabierta. Descripción: "+rec.desc+"\nCompletar: "+appUrl+"?completar="+rec.id);
-      const calLink  = buildGCalLink({
-        titulo: "Tarea (nueva fecha) "+rec.sector+" — "+rec.numero,
-        desc: "Tarea reabierta. Descripción: "+rec.desc+"\nCompletar: "+appUrl+"?completar="+rec.id,
-        fechaInicio: fechaInicioNueva,
-        fechaFin: fechaCierreNueva,
-      });
-      const catRespMails = (getCatCfg(rec.cat).responsables||[]).map(x=>x.mail).filter(Boolean);
-      for(const ejMail of ejMails) {
-        const ejNombre = (f.ejecutores_lista||[]).find(e=>e.mail===ejMail)?.nombre || rec.ejecutorNombre || ejMail;
-        await sendEmail({
-          to: ejMail,
-          cc: catRespMails.filter(m=>m!==ejMail),
-          subject: `[Asturiano] Nueva fecha asignada — ${rec.numero}: ${rec.sector}`,
-          body: `Hola ${ejNombre},\n\nLa solicitud ${rec.numero} fue reabierta por el solicitante y tiene una nueva fecha de resolución asignada.\n\nSector: ${rec.sector}\nProblema: ${rec.sub}\nDescripción: ${rec.desc}\n\nNueva fecha inicio: ${fd(fechaInicioNueva)||"—"}\nNueva fecha cierre: ${fd(fechaCierreNueva)}\n${f.motivoActualizacion?"Motivo: "+f.motivoActualizacion+"\n":""}\n📅 Agregar al calendario: ${calLink}\n\n✅ Cuando completes: ${appUrl}?completar=${rec.id}\n\n— Sistema de Reclamos — Asturiano`
-        });
+      const fechaInicioAnterior = rec.fechaInicioActualizada || rec.fechaInicioEsperado || rec.fechaInicioOriginal || "";
+      const fechaCierreAnterior = rec.fechaCierreActualizada || rec.fechaCierre || rec.fechaOriginalCierre || "";
+      const horaInicioAnterior  = rec.horaInicio || "";
+      const horaFinAnterior     = rec.horaFin || "";
+
+      const fechaInicioNueva = f.fechaInicioActualizada || f.fechaInicioEsperado || "";
+      const fechaCierreNueva = f.fechaCierreActualizada || f.fechaCierre || "";
+      const horaInicioNueva  = f.horaInicio || "";
+      const horaFinNueva     = f.horaFin || "";
+
+      const cambioDeFecha = (fechaInicioNueva && fechaInicioNueva !== fechaInicioAnterior) ||
+                            (fechaCierreNueva && fechaCierreNueva !== fechaCierreAnterior);
+      const cambioDeHora  = (horaInicioNueva !== horaInicioAnterior) || (horaFinNueva !== horaFinAnterior);
+      const hayEjecutorInterno = !!(savedRec.ejecutorMail && !savedRec.ejecutorMail.includes("externo"));
+      const yaHabiaFechas = !!(fechaInicioAnterior && fechaCierreAnterior);
+
+      // Solo actuar si había fechas previas (es reprogramación, no asignación inicial)
+      if(yaHabiaFechas && hayEjecutorInterno && (cambioDeFecha || cambioDeHora)) {
+
+        // 1. Resetear confirmación del ejecutor → debe reconfirmar
+        const ejListaReset = (savedRec.ejecutores_lista||[]).map(ej => ({
+          ...ej, confirmado: false, rechazado: false, fechaConfirmacion: null
+        }));
+        savedRec = {
+          ...savedRec,
+          ejecutorConfirmado: false,
+          ejecutorRechazado: false,
+          fechaConfirmacion: null,
+          ejecutores_lista: ejListaReset,
+          comentarios: [...(savedRec.comentarios||[]), {
+            texto: `Fechas reprogramadas. Ejecutor debe reconfirmar.${f.motivoActualizacion?" Motivo: "+f.motivoActualizacion:""}`,
+            fecha: new Date().toISOString(), autor: "Sistema"
+          }]
+        };
+        await sbUpsert(savedRec);
+
+        // 2. Notificar al solicitante SOLO si cambió la fecha (no si solo cambió hora)
+        if(cambioDeFecha && rec.email) {
+          await sendEmail({
+            to: rec.email,
+            subject: `[Asturiano] Tu solicitud fue reprogramada — ${rec.numero}`,
+            body: `Hola ${rec.nombre},\n\nTu solicitud fue reprogramada.\n\nSector: ${rec.sector}\nProblema: ${rec.sub}\n\nNueva fecha inicio: ${fd(fechaInicioNueva)||"—"}\nNueva fecha cierre: ${fd(fechaCierreNueva)}\n${f.motivoActualizacion?"Motivo: "+f.motivoActualizacion+"\n":""}\nPodés seguir el estado en:\n${appUrl}?seguimiento=${rec.numero}\n\n— Equipo de Intendencia Asturiano`
+          });
+        }
+
+        // 3. Notificar al/los ejecutor/es con ICS adjunto (siempre, fecha u hora)
+        const ejList = (savedRec.ejecutores_lista||[]).filter(ej=>ej.mail&&!ej.mail.includes("externo"));
+        const ejMails = ejList.length
+          ? ejList.map(ej=>ej.mail)
+          : (savedRec.ejecutorMail && !savedRec.ejecutorMail.includes("externo") ? [savedRec.ejecutorMail] : []);
+        const catRespMails = (getCatCfg(rec.cat).responsables||[]).map(x=>x.mail).filter(Boolean);
+        const confirmarUrl = `${appUrl}?confirmar=${rec.id}`;
+        const rechazarUrl  = `${appUrl}?rechazar=${rec.id}`;
+
+        for(const ejMail of ejMails) {
+          const ejNombre = (ejList.find(e=>e.mail===ejMail)?.nombre) || savedRec.ejecutorNombre || ejMail;
+          const yaAgendado = savedRec.calendarioAgendado;
+          const accionCalendario = yaAgendado
+            ? "Ya tenías esta tarea agendada. Borrá el evento anterior y usá el adjunto .ics para actualizar tu calendario."
+            : "Podés agregar esta tarea a tu calendario usando el archivo .ics adjunto.";
+
+          await sendEmail({
+            to: ejMail,
+            cc: catRespMails.filter(m=>m!==ejMail),
+            subject: `[Asturiano] ⚠️ Tarea reprogramada — ${rec.numero}: ${rec.sector}`,
+            body: `Hola ${ejNombre},\n\nLa tarea ${rec.numero} fue reprogramada y necesitás reconfirmarla.\n\nSector: ${rec.sector}\nProblema: ${rec.sub}\nDescripción: ${rec.desc}\n\nNueva fecha inicio: ${fd(fechaInicioNueva)||"—"}\nNueva fecha cierre: ${fd(fechaCierreNueva)}${horaInicioNueva?"\nHorario: "+horaInicioNueva+(horaFinNueva?" a "+horaFinNueva:""):""}\n${f.motivoActualizacion?"Motivo: "+f.motivoActualizacion+"\n":""}\n${accionCalendario}\n\n✅ CONFIRMAR: ${confirmarUrl}&mail=${encodeURIComponent(ejMail)}\n❌ RECHAZAR: ${rechazarUrl}&mail=${encodeURIComponent(ejMail)}\n\n— Sistema de Reclamos — Asturiano`,
+            icsData: {
+              id: rec.id,
+              numero: rec.numero,
+              sector: rec.sector,
+              sub: rec.sub,
+              desc: rec.desc,
+              fechaInicio: fechaInicioNueva,
+              fechaFin: fechaCierreNueva,
+              horaInicio: horaInicioNueva,
+              horaFin: horaFinNueva,
+              completarUrl: `${appUrl}?completar=${rec.id}`
+            }
+          });
+        }
       }
     }
     // When marked as completada → set to esperando_validacion (directivo must approve first)
@@ -2454,6 +2513,7 @@ function App() {
             ejecutorConfirmado: ejListaUpdated.some(ej=>ej.confirmado),
             ejecutorRechazado: ejListaUpdated.every(ej=>ej.rechazado),
             fechaConfirmacion:new Date().toISOString(),
+            calendarioAgendado: true,
             ejecutores_lista: ejListaUpdated,
             comentarios:[...(r.comentarios||[]),{texto:"Ejecutor "+mailParam+" confirmó responsabilidad.",fecha:new Date().toISOString(),autor:"Sistema"}]};
           await sbUpsert(updated);
