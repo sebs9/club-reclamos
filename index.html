@@ -653,10 +653,11 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
       setTab("resolucion");
       return;
     }
-    // Skip executor/date validation when linked to a project
+    // Skip executor/date validation when linked to a project OR when consolidating
     const isVinculado = f.estadoAvance==="vinculado_proyecto" || f.proyectoVinculadoId;
-    // Validate required fields for assignment (only if not linked to project)
-    if(!isVinculado && (tab==="asignacion" || tab==="gestion")) {
+    const isConsolidando = (f.reclamosHijos||[]).length > 0;
+    // Validate required fields for assignment (only if not linked to project and not consolidating)
+    if(!isVinculado && !isConsolidando && (tab==="asignacion" || tab==="gestion")) {
       if(!f.ejecutorMail) { setSaveErr("Debés asignar un ejecutor antes de guardar."); return; }
       if(f.ejecutorMail && !f.nuevoComentario.trim() && !rec.comentarios?.some(c=>c.autor==="Intendencia")) { setSaveErr("El comentario para el ejecutor es obligatorio."); setTab("gestion"); return; }
       if(!f.fechaInicioEsperado && !rec.fechaInicioOriginal) { setSaveErr("La fecha de inicio es obligatoria."); return; }
@@ -800,6 +801,36 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
       fechaCierreConfirmada,fechaInicioOriginal,fechaOriginalCierre,ejecutorMailOriginal,fechaAsignacion,
       updatedAt:new Date().toISOString()};
     await onSave(savedRec);
+    // Consolidación manual: autopopular datos del padre en cada hijo nuevo
+    const hijosAnteriores = new Set(rec.reclamosHijos||[]);
+    const hijosNuevos = (f.reclamosHijos||[]).filter(num => !hijosAnteriores.has(num));
+    if(hijosNuevos.length > 0) {
+      const appUrl = window.location.href.split("?")[0];
+      for(const num of hijosNuevos) {
+        const hijo = recs.find(r=>r.numero===num);
+        if(!hijo) continue;
+        const hijoUpd = {...hijo,
+          estadoAvance: "consolidada",
+          reclamoPadre: savedRec.numero,
+          ejecutorMail: savedRec.ejecutorMail||"",
+          ejecutorNombre: savedRec.ejecutorNombre||"",
+          ejecutorConfirmado: savedRec.ejecutorConfirmado||false,
+          ejecutores_lista: savedRec.ejecutores_lista||[],
+          fechaInicioEsperado: savedRec.fechaInicioEsperado||"",
+          fechaCierre: savedRec.fechaCierre||"",
+          fechaCierreConfirmada: savedRec.fechaCierreConfirmada||"",
+          criticidad: savedRec.criticidad||hijo.criticidad,
+          descripcionResolucion: savedRec.descripcionResolucion||"",
+          posiblesDuplicados: [],
+          comentarios:[...(hijo.comentarios||[]),{texto:`Consolidada como sub-ticket de ${savedRec.numero}. Será resuelta en conjunto.`,fecha:new Date().toISOString(),autor:"Sistema"}]
+        };
+        await sbUpsert(hijoUpd);
+        setRecs(prev=>prev.map(r=>r.id===hijoUpd.id?hijoUpd:r));
+        if(hijo.email) await sendEmail({to:hijo.email,
+          subject:`[Asturiano] Tu solicitud fue consolidada — ${hijo.numero}`,
+          body:`Hola ${hijo.nombre},\n\nTu solicitud ${hijo.numero} (${hijo.sector}) fue consolidada con otra solicitud sobre el mismo problema.\n\nAmbas serán resueltas juntas.${savedRec.fechaCierreConfirmada?"\n\nFecha estimada de resolución: "+fd(savedRec.fechaCierreConfirmada):""}${savedRec.ejecutorNombre?"\nEquipo asignado: "+savedRec.ejecutorNombre:""}\n\nSeguí el estado:\n${appUrl}?seguimiento=${hijo.numero}\n\n— Equipo de Intendencia Asturiano`});
+      }
+    }
     // Si está reabierta y se asignó nueva fecha → notificar al ejecutor
     if(rec.reabierta && f.fechaCierreActualizada && f.fechaCierreActualizada !== rec.fechaCierreActualizada) {
       const appUrl = window.location.href.split("?")[0];
