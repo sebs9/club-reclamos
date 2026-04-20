@@ -612,7 +612,7 @@ function PantallaRechazo({onConfirm}) {
 }
 
 // ── MODAL GESTIÓN ──────────────────────────────────────────────────────────
-function EditModal({rec, onClose, onSave, ejecutores}) {
+function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo}) {
   const [tab,setTab] = useState("gestion");
   const yaFueAsignado = !!(rec.ejecutorMailOriginal || rec.fechaInicioOriginal);
   const [f,setF] = useState({
@@ -825,7 +825,7 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
           comentarios:[...(hijo.comentarios||[]),{texto:`Consolidada como sub-ticket de ${savedRec.numero}. Será resuelta en conjunto.`,fecha:new Date().toISOString(),autor:"Sistema"}]
         };
         await sbUpsert(hijoUpd);
-        setRecs(prev=>prev.map(r=>r.id===hijoUpd.id?hijoUpd:r));
+        if(onUpdateHijo) await onUpdateHijo(hijoUpd);
         if(hijo.email) await sendEmail({to:hijo.email,
           subject:`[Asturiano] Tu solicitud fue consolidada — ${hijo.numero}`,
           body:`Hola ${hijo.nombre},\n\nTu solicitud ${hijo.numero} (${hijo.sector}) fue consolidada con otra solicitud sobre el mismo problema.\n\nAmbas serán resueltas juntas.${savedRec.fechaCierreConfirmada?"\n\nFecha estimada de resolución: "+fd(savedRec.fechaCierreConfirmada):""}${savedRec.ejecutorNombre?"\nEquipo asignado: "+savedRec.ejecutorNombre:""}\n\nSeguí el estado:\n${appUrl}?seguimiento=${hijo.numero}\n\n— Equipo de Intendencia Asturiano`});
@@ -2023,7 +2023,7 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
           })))),
     mainTab==="reclamos" && view==="kanban" && h(Kanban,{recs:filtrados,onEdit:setModal}),
     mainTab==="proyectos" && h(ProyectosTab,{recs,onUpdate,ejecutores}),
-    modal && h(EditModal,{rec:modal,onClose:()=>setModal(null),onSave:async u=>{await onUpdate(u,modal);setModal(null);},ejecutores}),
+    modal && h(EditModal,{rec:modal,onClose:()=>setModal(null),onSave:async u=>{await onUpdate(u,modal);setModal(null);},ejecutores,onUpdateHijo:async u=>{await onUpdate(u,u);}}),
     showCfg && h(PanelConfig,{onClose:()=>setShowCfg(false),onSaveEjecutores:ejs=>{setEjecutores(ejs);setShowCfg(false);}}),
     modalDup && h(ModalDuplicado,{
       hijo: modalDup.hijo,
