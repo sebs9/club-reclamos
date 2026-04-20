@@ -968,26 +968,14 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs}) {
           const ejNombre = (ejList.find(e=>e.mail===ejMail)?.nombre) || savedRec.ejecutorNombre || ejMail;
           const yaAgendado = savedRec.calendarioAgendado;
           const accionCalendario = yaAgendado
-            ? "Ya tenías esta tarea agendada. Borrá el evento anterior y usá el adjunto .ics para actualizar tu calendario."
-            : "Podés agregar esta tarea a tu calendario usando el archivo .ics adjunto.";
+            ? "Si ya tenías esta tarea agendada, eliminá el evento anterior y agendá la nueva fecha cuando confirmes."
+            : "Vas a poder agregar el nuevo evento a tu calendario cuando confirmes la tarea.";
 
           await sendEmail({
             to: ejMail,
             cc: catRespMails.filter(m=>m!==ejMail),
             subject: `[Asturiano] ⚠️ Tarea reprogramada — ${rec.numero}: ${rec.sector}`,
-            body: `Hola ${ejNombre},\n\nLa tarea ${rec.numero} fue reprogramada y necesitás reconfirmarla.\n\nSector: ${rec.sector}\nProblema: ${rec.sub}\nDescripción: ${rec.desc}\n\nNueva fecha inicio: ${fd(fechaInicioNueva)||"—"}\nNueva fecha cierre: ${fd(fechaCierreNueva)}${horaInicioNueva?"\nHorario: "+horaInicioNueva+(horaFinNueva?" a "+horaFinNueva:""):""}\n${f.motivoActualizacion?"Motivo: "+f.motivoActualizacion+"\n":""}\n${accionCalendario}\n\n✅ CONFIRMAR: ${confirmarUrl}&mail=${encodeURIComponent(ejMail)}\n❌ RECHAZAR: ${rechazarUrl}&mail=${encodeURIComponent(ejMail)}\n\n— Sistema de Reclamos — Asturiano`,
-            icsData: {
-              id: rec.id,
-              numero: rec.numero,
-              sector: rec.sector,
-              sub: rec.sub,
-              desc: rec.desc,
-              fechaInicio: fechaInicioNueva,
-              fechaFin: fechaCierreNueva,
-              horaInicio: horaInicioNueva,
-              horaFin: horaFinNueva,
-              completarUrl: `${appUrl}?completar=${rec.id}`
-            }
+            body: `Hola ${ejNombre},\n\nLa tarea ${rec.numero} fue reprogramada y necesitás reconfirmarla.\n\nSector: ${rec.sector}\nProblema: ${rec.sub}\nDescripción: ${rec.desc}\n\nNueva fecha inicio: ${fd(fechaInicioNueva)||"—"}\nNueva fecha cierre: ${fd(fechaCierreNueva)}${horaInicioNueva?"\nHorario: "+horaInicioNueva+(horaFinNueva?" a "+horaFinNueva:""):""}\n${f.motivoActualizacion?"Motivo: "+f.motivoActualizacion+"\n":""}\n${accionCalendario}\n\n✅ CONFIRMAR: ${confirmarUrl}&mail=${encodeURIComponent(ejMail)}\n❌ RECHAZAR: ${rechazarUrl}&mail=${encodeURIComponent(ejMail)}\n\n— Sistema de Reclamos — Asturiano`
           });
         }
       }
@@ -2735,26 +2723,28 @@ Te avisaremos cuando esté resuelto.
   if(!loaded) return h('div',{style:{minHeight:"100vh",background:"#0f172a",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:18}},"Cargando...");
 
   if(view==="confirm_ok") {
-    // Build calendar links from the confirmed reclamo
     const confirmedRec = recs.find(r=>String(r.id)===String(ls.get("lastConfirmedId")));
     const _appUrl = window.location.href.split("?")[0];
-    const _calLinks = confirmedRec && confirmedRec.fechaInicioEsperado ? (()=>{
-      const appU = _appUrl;
-      const isSameDay = confirmedRec.fechaInicioEsperado && confirmedRec.fechaCierre && confirmedRec.fechaInicioEsperado===confirmedRec.fechaCierre;
+    const _calLinks = confirmedRec && (confirmedRec.fechaInicioEsperado||confirmedRec.fechaInicioActualizada) ? (()=>{
+      // Usar fechas actualizadas si existen (reprogramación), sino las originales
+      const fInicio = confirmedRec.fechaInicioActualizada || confirmedRec.fechaInicioEsperado;
+      const fCierre = confirmedRec.fechaCierreActualizada || confirmedRec.fechaCierre || fInicio;
+      const isSameDay = fInicio === fCierre;
       return {
         tarea: buildGCalLink({
           titulo: "Tarea "+confirmedRec.sector+" — "+confirmedRec.numero,
-          desc: "Descripcion: "+confirmedRec.desc+"\nCompletar: "+appU+"?completar="+confirmedRec.id,
-          fechaInicio: confirmedRec.fechaInicioEsperado,
-          fechaFin: confirmedRec.fechaCierre||confirmedRec.fechaInicioEsperado,
+          desc: "Descripcion: "+confirmedRec.desc+"\nCompletar: "+_appUrl+"?completar="+confirmedRec.id,
+          fechaInicio: fInicio,
+          fechaFin: fCierre,
           horaInicio: isSameDay ? confirmedRec.horaInicio : null,
           horaFin: isSameDay ? confirmedRec.horaFin : null,
         }),
         cierre: buildGCalReminderLink({
           titulo: "Recordatorio cierre — "+confirmedRec.numero,
-          desc: "Confirmar que la tarea fue completada: "+appU+"?completar="+confirmedRec.id,
-          fechaFin: confirmedRec.fechaCierre||confirmedRec.fechaInicioEsperado,
-        })
+          desc: "Confirmar que la tarea fue completada: "+_appUrl+"?completar="+confirmedRec.id,
+          fechaFin: fCierre,
+        }),
+        esReprogramacion: !!(confirmedRec.fechaInicioActualizada || confirmedRec.fechaCierreActualizada),
       };
     })() : null;
     return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
@@ -2762,7 +2752,9 @@ Te avisaremos cuando esté resuelto.
       h('div',{style:{fontSize:64,marginBottom:16}},"✅"),
       h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:26,color:"#0f172a",margin:"0 0 12px"}},"¡Tarea confirmada!"),
       h('p',{style:{color:"#64748b",fontSize:15,lineHeight:1.6}},"Confirmaste que asumís la responsabilidad. El responsable fue notificado."),
-      _calLinks && h('div',{style:{marginTop:20,display:"flex",flexDirection:"column",gap:10}},
+      _calLinks && _calLinks.esReprogramacion && h('div',{style:{background:"#fff7ed",border:"1.5px solid #fed7aa",borderRadius:10,padding:"10px 14px",margin:"16px 0",fontSize:13,color:"#92400e",textAlign:"left"}},
+        "⚠️ Esta tarea fue reprogramada. Si ya tenías el evento anterior en tu calendario, eliminalo antes de agregar el nuevo."),
+      _calLinks && h('div',{style:{marginTop:16,display:"flex",flexDirection:"column",gap:10}},
         h('p',{style:{color:"#374151",fontSize:13,fontWeight:600,marginBottom:4}},"Agregá los eventos a tu calendario:"),
         h('a',{href:_calLinks.tarea,target:"_blank",style:{display:"block",padding:"12px 20px",background:"#3b82f6",color:"white",textDecoration:"none",borderRadius:10,fontWeight:700,fontSize:14}},"Agregar tarea al calendario"),
         h('a',{href:_calLinks.cierre,target:"_blank",style:{display:"block",padding:"12px 20px",background:"#6b7280",color:"white",textDecoration:"none",borderRadius:10,fontWeight:700,fontSize:14}},"Agregar recordatorio de cierre")),
@@ -2892,6 +2884,5 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
-
 
 
