@@ -363,19 +363,28 @@ Descripción: "${nuevoRec.desc}"
 SOLICITUDES EXISTENTES ABIERTAS:
 ${candidatos.map((r,i)=>`${i+1}. [${r.numero}] Sector: ${r.sector} | Descripción: "${r.desc}"`).join("\n")}
 
-Tu tarea: identificar si alguna solicitud existente describe CLARAMENTE EL MISMO PROBLEMA FÍSICO que la nueva.
+Tu tarea: identificar si alguna solicitud existente describe EL MISMO PROBLEMA FÍSICO o situación que la nueva, aunque usen palabras distintas.
 
-REGLAS ESTRICTAS:
-- Evaluá PRIMERO la descripción. Si las descripciones apuntan al mismo problema concreto, es candidato.
-- El sector es una señal de apoyo: si coincide, aumenta la confianza. Pero NO es requisito.
-- El tipo de problema (categoría) NO importa — ignoralo completamente. Una solicitud de "limpieza" y otra de "mantenimiento" pueden ser el mismo problema.
-- Solo reportá si estás MUY seguro. Si tenés la mínima duda, no lo incluyas.
-- Ejemplos de duplicado obvio: "las mesas están muy sucias" y "hay que limpiar las mesas" → mismo problema aunque sean categorías distintas.
-- Ejemplos de NO duplicado: "la pileta tiene una gotera" y "la pileta está sucia" → problemas distintos aunque mismo sector.
+REGLAS:
+- Evaluá el SIGNIFICADO de las descripciones, no las palabras exactas. Sinónimos y frases distintas pueden referirse al mismo problema.
+- El sector es una señal de apoyo: si coincide, aumenta la confianza.
+- El tipo de problema (categoría) NO importa — ignoralo completamente.
+- Solo reportá si estás seguro de que es el mismo problema.
+- Si tenés dudas, NO lo incluyas.
+
+EJEMPLOS DE DUPLICADOS OBVIOS (aunque usen palabras distintas):
+- "las mesas están muy sucias" = "hay que limpiar las mesas" → mismo problema
+- "mal olor en el salón" = "aire viciado" = "huele mal" → mismo problema  
+- "canilla rota" = "la canilla gotea" = "pérdida de agua en grifo" → mismo problema
+- "luz fundida" = "no funciona la iluminación" = "está oscuro" → mismo problema
+
+EJEMPLOS DE NO DUPLICADOS:
+- "la pileta tiene una gotera" ≠ "la pileta está sucia" → problemas distintos
+- "sillas rotas" ≠ "mesas sucias" → problemas distintos aunque mismo sector
 
 Respondé SOLO con JSON válido, sin texto adicional:
 {"similares": [{"numero": "X-XXX-XXX", "razon": "explicación concreta de por qué es el mismo problema", "sectorCoincide": true/false}]}
-Si no hay similares obvios: {"similares": []}`;
+Si no hay similares: {"similares": []}`;
 
     const resp = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -2440,10 +2449,13 @@ function App() {
   },[view, loaded]);
 
   const add = async rec => {
-    // Run duplicate detection
-    const duplicados = await detectarDuplicados(rec, recs);
+    // Fetch fresh recs from Supabase for accurate duplicate detection
+    const recsFrescos = await sbGetAll();
+    setRecs(recsFrescos);
+    const duplicados = await detectarDuplicados(rec, recsFrescos);
+    console.log("Duplicate detection result:", duplicados);
     const recConDups = duplicados.length > 0 ? {...rec, posiblesDuplicados: duplicados} : rec;
-    setRecs(prev=>[recConDups,...prev]);
+    setRecs(prev=>[recConDups,...prev.filter(r=>r.id!==rec.id)]);
     await sbUpsert(recConDups);
   };
   const upd = async (rec, prevRec) => {
@@ -2680,6 +2692,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
+
 
 
 
