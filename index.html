@@ -2649,9 +2649,9 @@ Te avisaremos cuando esté resuelto.
 
   if(view==="confirm_ok") {
     // Build calendar links from the confirmed reclamo
-    const confirmedRec = recs.find(r=>String(r.id)===ls.get("lastConfirmedId"));
+    const confirmedRec = recs.find(r=>String(r.id)===String(ls.get("lastConfirmedId")));
     const _appUrl = window.location.href.split("?")[0];
-    const _calLinks = confirmedRec ? (()=>{
+    const _calLinks = confirmedRec && confirmedRec.fechaInicioEsperado ? (()=>{
       const appU = _appUrl;
       const isSameDay = confirmedRec.fechaInicioEsperado && confirmedRec.fechaCierre && confirmedRec.fechaInicioEsperado===confirmedRec.fechaCierre;
       return {
@@ -2659,7 +2659,7 @@ Te avisaremos cuando esté resuelto.
           titulo: "Tarea "+confirmedRec.sector+" — "+confirmedRec.numero,
           desc: "Descripcion: "+confirmedRec.desc+"\nCompletar: "+appU+"?completar="+confirmedRec.id,
           fechaInicio: confirmedRec.fechaInicioEsperado,
-          fechaFin: confirmedRec.fechaCierre,
+          fechaFin: confirmedRec.fechaCierre||confirmedRec.fechaInicioEsperado,
           horaInicio: isSameDay ? confirmedRec.horaInicio : null,
           horaFin: isSameDay ? confirmedRec.horaFin : null,
         }),
