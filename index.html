@@ -27,13 +27,24 @@ const ESCALADO = {
   baja:    { dias: 5 },
 };
 
+// Cache de config — se carga desde Supabase al iniciar, fallback a localStorage
+let _cfgCache = null;
 function getMailConfig() {
-  const cfg = ls.get("config") || {};
+  const cfg = _cfgCache || ls.get("config") || {};
   return { scriptUrl: cfg.scriptUrl || SCRIPT_URL, categorias: cfg.categorias || {} };
 }
 function getCatCfg(cat) {
-  const cfg = ls.get("config") || {};
+  const cfg = _cfgCache || ls.get("config") || {};
   return (cfg.categorias || {})[cat] || { responsables: [], directivos: [] };
+}
+async function loadConfig() {
+  const remote = await sbGetConfig();
+  if(remote) {
+    _cfgCache = remote;
+    ls.set("config", remote); // sync a localStorage como backup
+  } else {
+    _cfgCache = ls.get("config") || {};
+  }
 }
 function getDirectivos(cat) {
   return getCatCfg(cat).directivos || [];
@@ -321,8 +332,28 @@ async function sbGetAll() {
     const r = await fetch(SUPABASE_URL+"/rest/v1/reclamos?select=data&order=created_at.desc", {headers: SB_HEADERS});
     const rows = await r.json();
     console.log("sbGetAll:", rows.length, "rows");
-    return Array.isArray(rows) ? rows.map(r=>r.data) : [];
+    return Array.isArray(rows) ? rows.map(r=>r.data).filter(d=>d&&d.id!==0) : [];
   } catch(e) { console.error("sbGetAll error:", e); return []; }
+}
+
+async function sbGetConfig() {
+  try {
+    const r = await fetch(SUPABASE_URL+"/rest/v1/reclamos?id=eq.0&select=data", {headers: SB_HEADERS});
+    const rows = await r.json();
+    if(Array.isArray(rows) && rows.length > 0 && rows[0].data) return rows[0].data;
+    return null;
+  } catch(e) { console.error("sbGetConfig error:", e); return null; }
+}
+
+async function sbSetConfig(cfg) {
+  try {
+    const r = await fetch(SUPABASE_URL+"/rest/v1/reclamos", {
+      method: "POST",
+      headers: {...SB_HEADERS, "Prefer":"resolution=merge-duplicates,return=minimal"},
+      body: JSON.stringify({id: 0, data: {...cfg, id: 0}}),
+    });
+    console.log("sbSetConfig status:", r.status);
+  } catch(e) { console.error("sbSetConfig error:", e); }
 }
 
 async function sbUpsert(rec) {
@@ -1397,15 +1428,29 @@ function PanelConfig({onClose, onSaveEjecutores}) {
   const [cfg,setCfg] = useState(defaultCfg);
   const [saved,setSaved] = useState(false);
   const [tab,setTab] = useState("roles");
+  const [scriptPass,setScriptPass] = useState("");
+  const [scriptUnlocked,setScriptUnlocked] = useState(false);
+  const [scriptPassErr,setScriptPassErr] = useState(false);
+  const SCRIPT_PASS = "solicitudes2026";
 
   useEffect(()=>{
-    setEjs(ls.get("ejecutores")||[]);
-    setCfg({...defaultCfg,...(ls.get("config")||{})});
+    // Cargar config desde Supabase primero, fallback a localStorage
+    (async()=>{
+      const remote = await sbGetConfig();
+      const base = remote || ls.get("config") || {};
+      setEjs(ls.get("ejecutores")||[]);
+      setCfg({...defaultCfg,...base});
+      if(remote) { _cfgCache = remote; ls.set("config", remote); }
+    })();
   },[]);
 
   const save = async () => {
-    ls.set("ejecutores",ejs); ls.set("config",cfg);
+    ls.set("ejecutores",ejs);
+    ls.set("config",cfg);
+    _cfgCache = cfg;
     if(onSaveEjecutores) onSaveEjecutores(ejs);
+    // Guardar config en Supabase
+    await sbSetConfig(cfg);
     // Sync config to Apps Script for automatic escalation
     const scriptUrl = cfg.scriptUrl || SCRIPT_URL;
     if(scriptUrl) {
@@ -1484,8 +1529,17 @@ function PanelConfig({onClose, onSaveEjecutores}) {
         tab==="sistema" && h('div',null,
           h('div',{style:{marginBottom:16}},
             h('div',{style:{fontSize:13,fontWeight:700,color:"#0f172a",marginBottom:4}},"🔗 Google Apps Script URL"),
-            h('div',{style:{fontSize:12,color:"#64748b",marginBottom:8}},"URL del script que envía los emails."),
-            h('input',{value:cfg.scriptUrl||"",onChange:e=>setCfg(c=>({...c,scriptUrl:e.target.value})),placeholder:"https://script.google.com/macros/s/.../exec",style:iS()}))),
+            h('div',{style:{fontSize:12,color:"#64748b",marginBottom:8}},"URL del script que envía los emails. Requiere contraseña de administrador."),
+            !scriptUnlocked
+              ? h('div',{style:{display:"flex",gap:8}},
+                  h('input',{type:"password",value:scriptPass,onChange:e=>{setScriptPass(e.target.value);setScriptPassErr(false);},placeholder:"Contraseña para editar",style:{...iS(),flex:1,border:scriptPassErr?"2px solid #ef4444":"1.5px solid #e2e8f0"}}),
+                  h('button',{onClick:()=>{if(scriptPass===SCRIPT_PASS){setScriptUnlocked(true);setScriptPassErr(false);}else{setScriptPassErr(true);}},style:{padding:"9px 16px",background:"#0f172a",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:600,whiteSpace:"nowrap"}},"Desbloquear"),
+                  scriptPassErr && h('div',{style:{fontSize:12,color:"#dc2626",marginTop:4}},"Contraseña incorrecta"))
+              : h('div',null,
+                  h('div',{style:{display:"flex",alignItems:"center",gap:6,marginBottom:6}},
+                    h('span',{style:{fontSize:12,color:"#22c55e",fontWeight:600}},"🔓 Desbloqueado"),
+                    h('button',{onClick:()=>{setScriptUnlocked(false);setScriptPass("");},style:{background:"none",border:"none",color:"#94a3b8",cursor:"pointer",fontSize:12}},"Bloquear")),
+                  h('input',{value:cfg.scriptUrl||"",onChange:e=>setCfg(c=>({...c,scriptUrl:e.target.value})),placeholder:"https://script.google.com/macros/s/.../exec",style:iS()})))),
 
         h('button',{onClick:save,style:{width:"100%",padding:"13px",background:saved?"#22c55e":"linear-gradient(135deg,#0f172a,#1e3a5f)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700,transition:"background 0.3s",marginTop:20}},saved?"✅ Guardado":"Guardar configuración"))));
 }
@@ -2290,15 +2344,23 @@ function CompletarView({recId, recs, setRecs, loaded}) {
     const calificarUrl=appUrl+"?calificar="+rec.id;
     const mailCfg=getMailConfig();
     const msgCat={infraestructura:"nuestro equipo de obras e infraestructura revisó y resolvió el inconveniente",mantenimiento:"nuestro equipo de mantenimiento atendió y solucionó el problema",limpieza:"nuestro equipo de limpieza atendió la situación",equipamiento:"el equipamiento fue revisado y el problema fue solucionado",preparacion:"el espacio fue preparado correctamente",servicios:"nuestro equipo de atención al socio gestionó tu consulta",cuotas:"nuestro equipo administrativo revisó y resolvió tu consulta"}[rec.cat]||"nuestro equipo atendió y resolvió el inconveniente";
-    const updated={...rec,estadoAvance:"completada",descripcionResolucion:desc,adjuntosResolucion,updatedAt:new Date().toISOString(),
+    const updated={...rec,estadoAvance:"esperando_validacion",descripcionResolucion:desc,adjuntosResolucion,fechaEnvioValidacion:new Date().toISOString(),updatedAt:new Date().toISOString(),
       comentarios:[...(rec.comentarios||[]),{texto:`Ejecutor marcó como completada. Resolución: ${desc}`,fecha:new Date().toISOString(),autor:rec.ejecutorNombre||"Ejecutor"}]};
     await sbUpsert(updated);
     setRecs(prev=>prev.map(r=>r.id===rec.id?updated:r));
-    if(rec.email) await sendEmail({to:rec.email,subject:`[Asturiano]  Tu solicitud fue resuelta — ${rec.numero}`,
-      body:`Hola ${rec.nombre},\n\nNos alegra informarte que el inconveniente que reportaste en ${rec.sector} fue resuelto. ${msgCat}.\n\nLo que se hizo:\n${desc}\n\nCuando tengas un momento, evaluá si el problema quedó resuelto y calificá la atención. En caso de no estar conforme podés reabrir el ticket:\n${calificarUrl}\n\nGracias por ayudarnos a mejorar el club.\n\n— Equipo de Intendencia Asturiano`});
-    const dirMails=getDirectivos(rec.cat).map(d=>d.mail);
+    // Notificar al directivo para que revise antes de notificar al cliente
+    const dirMails=getDirectivos(rec.cat).map(d=>d.mail).filter(Boolean);
     const respMail=getResponsableMail(rec.cat);
-    await sendEmail({to:[respMail,...dirMails].filter(Boolean),subject:`[Asturiano]  Tarea completada por ejecutor — ${rec.numero}`,body:`${rec.ejecutorNombre||"El ejecutor"} marcó como completada la tarea ${rec.numero} (${rec.sector}).\n\nResolución: ${desc}`});
+    if(dirMails.length) {
+      await sendEmail({to:dirMails, cc:[respMail].filter(Boolean),
+        subject:`[Asturiano] Revisá antes de notificar al cliente — ${rec.numero}: ${rec.sector}`,
+        body:`Hola,\n\nLa tarea ${rec.numero} fue marcada como completada por ${rec.ejecutorNombre||"el ejecutor"}. Revisala antes de que se notifique al cliente.\n\nSector: ${rec.sector}\nProblema: ${rec.sub}\nEjecutor: ${rec.ejecutorNombre||"—"}\nDescripción de lo realizado: ${desc}\n\n¿Estás de acuerdo con la resolución?\n\n✅ Estoy de acuerdo (se notifica al cliente): ${appUrl}?validar=${rec.id}\n❌ No estoy de acuerdo (se reabre para retrabajar): ${appUrl}?rechazar_validacion=${rec.id}\n\nSi no respondés en 2 días, el cliente será notificado automáticamente.\n\n— Sistema de Reclamos — Asturiano`});
+    } else {
+      // Si no hay directivo configurado → notificar al cliente directamente
+      if(rec.email) await sendEmail({to:rec.email,subject:`[Asturiano]  Tu solicitud fue resuelta — ${rec.numero}`,
+        body:`Hola ${rec.nombre},\n\nNos alegra informarte que el inconveniente que reportaste en ${rec.sector} fue resuelto. ${msgCat}.\n\nLo que se hizo:\n${desc}\n\nCuando tengas un momento, evaluá si el problema quedó resuelto y calificá la atención:\n${calificarUrl}\n\nGracias por ayudarnos a mejorar el club.\n\n— Equipo de Intendencia Asturiano`});
+      await sbUpsert({...updated, estadoAvance:"completada"});
+    }
     setSending(false);setDone(true);
   };
 
@@ -2666,6 +2728,7 @@ function App() {
 
       setRecs(lista);
       const ej=ls.get("ejecutores"); if(ej) setEjecutores(ej);
+      await loadConfig(); // Cargar config desde Supabase
       setLoaded(true);
     })();
   },[]);
