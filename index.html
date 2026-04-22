@@ -2412,24 +2412,20 @@ function RechazarValidacionView({recId, recs, setRecs, loaded}) {
 
   const submit = async () => {
     if(!motivo.trim()){ setErr("El motivo es obligatorio."); return; }
-    if(!nuevaFecha){ setErr("La nueva fecha de resolución es obligatoria."); return; }
     setSending(true);
     const appUrl = window.location.href.split("?")[0];
     const updated = {...rec,
       estadoAvance: rec.ejecutorConfirmado ? "iniciada" : "bajo_analisis",
       descripcionResolucion: "",
-      fechaCierre: nuevaFecha,
-      fechaCierreActualizada: nuevaFecha,
-      motivoActualizacion: `Directivo no aprobó: ${motivo}`,
       fechaEnvioValidacion: null,
-      comentarios:[...(rec.comentarios||[]),{texto:`Directivo no estuvo de acuerdo con la resolución. Motivo: ${motivo}. Nueva fecha: ${nuevaFecha}.`,fecha:new Date().toISOString(),autor:"Directivo"}]};
+      comentarios:[...(rec.comentarios||[]),{texto:`Directivo no estuvo de acuerdo con la resolución. Motivo: ${motivo}`,fecha:new Date().toISOString(),autor:"Directivo"}]};
     await sbUpsert(updated);
     setRecs(prev=>prev.map(r=>r.id===rec.id?updated:r));
     const respMail = getResponsableMail(rec.cat);
     const dirMails = getDirectivos(rec.cat).map(d=>d.mail).filter(Boolean);
     if(respMail) await sendEmail({to:respMail, cc:dirMails,
       subject:`[Asturiano] El directivo no aprobó la resolución — ${rec.numero}: ${rec.sector}`,
-      body:`Hola,\n\nEl directivo revisó la tarea ${rec.numero} y consideró que la resolución no fue satisfactoria.\n\nSector: ${rec.sector}\nProblema: ${rec.sub}\nEjecutor: ${rec.ejecutorNombre||"—"}\n\nMotivo: ${motivo}\n\nNueva fecha de resolución asignada: ${nuevaFecha}\n\nPor favor gestioná nuevamente la solicitud.\n\n${appUrl}`});
+      body:`Hola,\n\nEl directivo revisó la tarea ${rec.numero} y consideró que la resolución no fue satisfactoria.\n\nSector: ${rec.sector}\nProblema: ${rec.sub}\nEjecutor: ${rec.ejecutorNombre||"—"}\n\nMotivo: ${motivo}\n\nPor favor revisá la tarea y asigná nuevas fechas de resolución.\n\n${appUrl}`});
     setSending(false); setDone(true);
   };
 
@@ -2447,9 +2443,6 @@ function RechazarValidacionView({recId, recs, setRecs, loaded}) {
         h('div',{style:{marginBottom:16}},
           h('label',{style:{display:"block",fontSize:12,fontWeight:600,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:0.5}},"Motivo del rechazo *"),
           h('textarea',{value:motivo,onChange:e=>{setMotivo(e.target.value);setErr("");},rows:4,placeholder:"Explicá qué no quedó bien y qué hay que corregir...",style:{width:"100%",padding:"10px 14px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:14,resize:"vertical",outline:"none",boxSizing:"border-box"}})),
-        h('div',{style:{marginBottom:16}},
-          h('label',{style:{display:"block",fontSize:12,fontWeight:600,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:0.5}},"Nueva fecha de resolución *"),
-          h('input',{type:"date",value:nuevaFecha,onChange:e=>{setNuevaFecha(e.target.value);setErr("");},min:hoyStr(),style:{width:"100%",padding:"10px 14px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:14,outline:"none",boxSizing:"border-box"}})),
         err && h('div',{style:{background:"#fef2f2",border:"1.5px solid #fecaca",borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:13,color:"#dc2626"}},err),
         h('button',{onClick:submit,disabled:sending,style:{width:"100%",padding:"14px",background:sending?"#94a3b8":"linear-gradient(135deg,#ef4444,#dc2626)",color:"white",border:"none",borderRadius:12,fontSize:15,fontWeight:700,cursor:"pointer"}},sending?"Enviando...":"❌ No estoy de acuerdo — reabrir solicitud"))));
 }
@@ -3002,6 +2995,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
+
 
 
 
