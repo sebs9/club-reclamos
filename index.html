@@ -2418,6 +2418,8 @@ function RechazarValidacionView({recId, recs, setRecs, loaded}) {
       estadoAvance: rec.ejecutorConfirmado ? "iniciada" : "bajo_analisis",
       descripcionResolucion: "",
       fechaEnvioValidacion: null,
+      reabierta: true,
+      reabiertaEn: new Date().toISOString(),
       comentarios:[...(rec.comentarios||[]),{texto:`Directivo no estuvo de acuerdo con la resolución. Motivo: ${motivo}`,fecha:new Date().toISOString(),autor:"Directivo"}]};
     await sbUpsert(updated);
     setRecs(prev=>prev.map(r=>r.id===rec.id?updated:r));
