@@ -1136,57 +1136,7 @@ Resolución: ${descripcion||"—"}`});
                     h('span',{style:{fontSize:9,color:"#64748b",textAlign:"center",padding:"0 4px"}},a.nombre?.substring(0,15)||"foto")));
               }))),
           rec.responsableArea?.nombre && h('div',{style:{marginTop:8,fontSize:12,color:"#64748b"}},"👔 "+rec.responsableArea.nombre),
-          rec.posiblesDuplicados?.length > 0 && h('div',{style:{marginTop:8,background:"#fef9c3",border:"1.5px solid #fde047",borderRadius:8,padding:"8px 12px"}},
-            h('div',{style:{fontSize:12,fontWeight:700,color:"#854d0e",marginBottom:4}},"🔍 Posibles solicitudes similares detectados"),
-            ...rec.posiblesDuplicados.map((d,i)=>h('div',{key:i,style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}},
-              h('div',{style:{flex:1}},
-                h('div',{style:{fontSize:12,fontWeight:700,color:"#713f12",marginBottom:2}},(d.similitud==="alta"?"⚠️ Alta similitud ":"💡 Posible similitud ")+"— "+d.numero),
-                h('div',{style:{fontSize:11,color:"#92400e",marginBottom:1}},"Existente: "+d.descExistente),
-                h('div',{style:{fontSize:11,color:"#713f12"}},"Nuevo: "+rec.desc),
-                h('div',{style:{fontSize:11,color:"#b45309",fontStyle:"italic",marginTop:2}},d.razon)),
-              h('div',{style:{display:"flex",gap:6}},
-                h('button',{onClick:async()=>{
-                    const existing = recs.find(r=>r.numero===d.numero);
-                    if(!existing) return;
-                    // La solicitud "existing" es el PADRE — rec es el hijo que se consolida
-                    // 1. Actualizar el padre: agregar rec.numero a reclamosHijos
-                    const padreActualizado = {
-                      ...existing,
-                      reclamosHijos: [...new Set([...(existing.reclamosHijos||[]), rec.numero])],
-                      comentarios:[...(existing.comentarios||[]),{texto:`Solicitud ${rec.numero} consolidada bajo esta. Mismo problema reportado por ${rec.nombre}.`,fecha:new Date().toISOString(),autor:"Sistema"}]
-                    };
-                    await onSave(padreActualizado);
-                    // 2. Actualizar el hijo (rec): heredar TODO del padre + marcar como consolidada
-                    const hijoActualizado = {
-                      ...rec,
-                      estadoAvance: "consolidada",
-                      reclamoPadre: existing.numero,
-                      ejecutorMail: existing.ejecutorMail||"",
-                      ejecutorNombre: existing.ejecutorNombre||"",
-                      ejecutorConfirmado: existing.ejecutorConfirmado||false,
-                      ejecutores_lista: existing.ejecutores_lista||[],
-                      fechaInicioEsperado: existing.fechaInicioEsperado||"",
-                      fechaCierre: existing.fechaCierre||"",
-                      fechaCierreConfirmada: existing.fechaCierreConfirmada||"",
-                      criticidad: existing.criticidad||rec.criticidad,
-                      descripcionResolucion: existing.descripcionResolucion||"",
-                      posiblesDuplicados: (rec.posiblesDuplicados||[]).filter(x=>x.numero!==d.numero),
-                      comentarios:[...(rec.comentarios||[]),{texto:`Consolidada con solicitud ${existing.numero}. Será resuelta en conjunto.`,fecha:new Date().toISOString(),autor:"Sistema"}]
-                    };
-                    await onSave(hijoActualizado);
-                    // 3. Notificar al solicitante del hijo
-                    if(rec.email) await sendEmail({
-                      to: rec.email,
-                      subject: `[Asturiano] Tu solicitud fue consolidada — ${rec.numero}`,
-                      body: `Hola ${rec.nombre},\n\nTu solicitud ${rec.numero} (${rec.sector}) fue consolidada con otra solicitud sobre el mismo problema.\n\nAmbas serán resueltas juntas como una sola gestión.${existing.fechaCierreConfirmada?"\n\nFecha estimada de resolución: "+fd(existing.fechaCierreConfirmada):""}${existing.ejecutorNombre?"\nEquipo asignado: "+existing.ejecutorNombre:""}\n\nRecibís las mismas notificaciones de avance. Podés seguir el estado:\n${window.location.href.split("?")[0]}?seguimiento=${rec.numero}\n\n— Equipo de Intendencia Asturiano`
-                    });
-                  },
-                  style:{padding:"4px 12px",background:"#854d0e",color:"white",border:"none",borderRadius:6,cursor:"pointer",fontSize:11,fontWeight:600}},"✅ Sí, consolidar"),
-                h('button',{onClick:()=>{
-                    const updated={...rec,posiblesDuplicados:rec.posiblesDuplicados.filter(x=>x.numero!==d.numero),duplicadosIgnorados:[...(rec.duplicadosIgnorados||[]),d.numero]};
-                    onSave(updated);
-                  },
-                  style:{padding:"3px 10px",background:"#f1f5f9",color:"#64748b",border:"none",borderRadius:6,cursor:"pointer",fontSize:11}},"No")))),
+
           rec.ejecutorRechazado ? h('div',{style:{marginTop:4,fontSize:12,color:"#dc2626",fontWeight:600}},"❌ Rechazada — acción requerida")
           : rec.ejecutorConfirmado ? h('div',{style:{marginTop:4,fontSize:12,color:"#22c55e",fontWeight:600}},"✅ Confirmada: "+rec.ejecutorNombre+" — "+fdt(rec.fechaConfirmacion))
           : rec.ejecutorMail ? h('div',{style:{marginTop:4,fontSize:12,color:"#1d4ed8",fontWeight:600}},"⏳ Esperando confirmación: "+rec.ejecutorNombre)
@@ -1397,7 +1347,7 @@ Resolución: ${descripcion||"—"}`});
         saveErr && h('div',{style:{background:"#fef2f2",border:"1.5px solid #fecaca",borderRadius:8,padding:"10px 14px",marginBottom:10,fontSize:13,color:"#dc2626"}},saveErr),
         h('div',{style:{display:"flex",gap:10,marginTop:4}},
           h('button',{onClick:onClose,style:{flex:1,padding:"12px",background:"#f1f5f9",color:"#64748b",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:600}},"Cancelar"),
-          h('button',{onClick:save,disabled:sending,style:{flex:2,padding:"12px",background:sending?"#94a3b8":"linear-gradient(135deg,#0f172a,#1e3a5f)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700}},sending?"Guardando...":"Guardar ✓"))));
+          h('button',{onClick:save,disabled:sending,style:{flex:2,padding:"12px",background:sending?"#94a3b8":"linear-gradient(135deg,#0f172a,#1e3a5f)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700}},sending?"Guardando...":"Guardar ✓")));
 }
 
 // ── PANEL CONFIG ───────────────────────────────────────────────────────────
@@ -1545,72 +1495,77 @@ function PanelConfig({onClose, onSaveEjecutores}) {
 }
 
 // ── MODAL DUPLICADO ────────────────────────────────────────────────────────
-function ModalDuplicado({hijo, padre, onConsolidar, onDescartar, onClose}) {
-  const catHijo = CATS[hijo.cat];
-  const catPadre = CATS[padre.cat];
-  const cardStyle = {background:"#f8fafc",borderRadius:12,padding:"16px 18px",flex:1};
+function ModalConsolidacion({hijo, candidatos, onClose, onConsolidar, onDescartar}) {
+  const [seleccionados, setSeleccionados] = useState(new Set());
+  const [confirmando, setConfirmando] = useState(false);
   const labelStyle = {fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:0.5,marginBottom:4};
   const valStyle = {fontSize:13,color:"#1e293b",lineHeight:1.5};
 
-  return h('div',{style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2000,padding:20}},
-    h('div',{style:{background:"white",borderRadius:20,width:"100%",maxWidth:680,maxHeight:"90vh",overflowY:"auto"}},
-      // Header
+  const toggle = (numero) => {
+    setSeleccionados(prev => {
+      const next = new Set(prev);
+      if(next.has(numero)) next.delete(numero); else next.add(numero);
+      return next;
+    });
+  };
+
+  const consolidar = async () => {
+    if(seleccionados.size === 0) return;
+    setConfirmando(true);
+    const selArray = candidatos.filter(c => seleccionados.has(c.numero));
+    const padre = selArray[0]; // más antiguo = padre
+    const hijos = [...selArray.slice(1), hijo];
+    await onConsolidar(padre, hijos);
+    setConfirmando(false);
+  };
+
+  const todos = [...candidatos, hijo];
+
+  return h('div',{style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"flex-start",justifyContent:"center",zIndex:2000,padding:"20px 12px",overflowY:"auto"}},
+    h('div',{style:{background:"white",borderRadius:20,width:"100%",maxWidth:Math.min(280*todos.length+60, window.innerWidth-24),marginBottom:20}},
       h('div',{style:{background:"#854d0e",padding:"16px 22px",borderRadius:"20px 20px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center"}},
         h('div',null,
-          h('div',{style:{fontSize:11,color:"#fde68a",letterSpacing:2,textTransform:"uppercase",marginBottom:2}},"Posible consolidación detectada"),
-          h('div',{style:{color:"white",fontSize:17,fontWeight:700}},"¿Son el mismo problema?")),
+          h('div',{style:{fontSize:11,color:"#fde68a",letterSpacing:2,textTransform:"uppercase",marginBottom:2}},"Posibles duplicados detectados"),
+          h('div',{style:{color:"white",fontSize:17,fontWeight:700}},"Seleccioná los que son el mismo problema")),
         h('button',{onClick:onClose,style:{background:"none",border:"none",color:"rgba(255,255,255,0.7)",fontSize:22,cursor:"pointer"}},"✕")),
       h('div',{style:{padding:"20px 22px"}},
-        // Comparación lado a lado
-        h('div',{style:{display:"flex",gap:14,marginBottom:20}},
-          // Solicitud nueva (hijo)
-          h('div',{style:{...cardStyle,border:"2px solid #fde68a"}},
-            h('div',{style:{fontSize:11,fontWeight:700,color:"#854d0e",marginBottom:10,textTransform:"uppercase"}},"🆕 Solicitud nueva"),
-            h('div',{style:{fontFamily:"monospace",fontSize:12,fontWeight:700,color:"#92400e",marginBottom:10}},hijo.numero),
-            h('div',{style:{marginBottom:8}},
-              h('div',{style:labelStyle},"Sector"),
-              h('div',{style:valStyle},hijo.sector)),
-            h('div',{style:{marginBottom:8}},
-              h('div',{style:labelStyle},"Tipo de problema"),
-              h('div',{style:valStyle},catHijo?.icon+" "+catHijo?.label+" › "+hijo.sub)),
-            h('div',{style:{marginBottom:8}},
-              h('div',{style:labelStyle},"Descripción"),
-              h('div',{style:{...valStyle,background:"#fffbeb",borderRadius:8,padding:"8px 10px",fontStyle:"italic"}},'"'+hijo.desc+'"')),
-            h('div',null,
-              h('div',{style:labelStyle},"Solicitante"),
-              h('div',{style:valStyle},hijo.nombre+" ("+hijo.tipo+")"))),
-          // Solicitud existente (padre)
-          h('div',{style:{...cardStyle,border:"2px solid #bfdbfe"}},
-            h('div',{style:{fontSize:11,fontWeight:700,color:"#1d4ed8",marginBottom:10,textTransform:"uppercase"}},"📋 Solicitud existente"),
-            h('div',{style:{fontFamily:"monospace",fontSize:12,fontWeight:700,color:"#1d4ed8",marginBottom:10}},padre.numero),
-            h('div',{style:{marginBottom:8}},
-              h('div',{style:labelStyle},"Sector"),
-              h('div',{style:valStyle},padre.sector)),
-            h('div',{style:{marginBottom:8}},
-              h('div',{style:labelStyle},"Tipo de problema"),
-              h('div',{style:valStyle},catPadre?.icon+" "+catPadre?.label+" › "+padre.sub)),
-            h('div',{style:{marginBottom:8}},
-              h('div',{style:labelStyle},"Descripción"),
-              h('div',{style:{...valStyle,background:"#eff6ff",borderRadius:8,padding:"8px 10px",fontStyle:"italic"}},'"'+padre.desc+'"')),
-            h('div',null,
-              h('div',{style:labelStyle},"Solicitante"),
-              h('div',{style:valStyle},padre.nombre+" ("+padre.tipo+")")))),
-        // Estado del padre si ya tiene gestión
-        (padre.ejecutorNombre || padre.fechaCierreConfirmada) && h('div',{style:{background:"#f0fdf4",border:"1.5px solid #bbf7d0",borderRadius:10,padding:"10px 14px",marginBottom:16,fontSize:13}},
-          h('div',{style:{fontWeight:700,color:"#15803d",marginBottom:4}},"✅ La solicitud existente ya tiene gestión asignada"),
-          padre.ejecutorNombre && h('div',{style:{color:"#166534"}},"Ejecutor: "+padre.ejecutorNombre),
-          padre.fechaCierreConfirmada && h('div',{style:{color:"#166534"}},"Fecha de resolución: "+fd(padre.fechaCierreConfirmada))),
-        // Botones — sin predeterminado
+        h('p',{style:{fontSize:13,color:"#64748b",marginBottom:16}},"Hacé click en los tickets que son el mismo problema. El más antiguo seleccionado se vuelve padre automáticamente. El ticket nuevo siempre queda como hijo."),
+        h('div',{style:{display:"flex",gap:12,overflowX:"auto",marginBottom:16,paddingBottom:4}},
+          ...todos.map((r, idx) => {
+            const esNuevo = r.id === hijo.id;
+            const esPadreNatural = !esNuevo && idx === 0;
+            const selec = seleccionados.has(r.numero);
+            const cat = CATS[r.cat];
+            const borderColor = esNuevo ? "#fde68a" : selec ? "#22c55e" : "#e2e8f0";
+            const bgColor = esNuevo ? "#fffbeb" : selec ? "#f0fdf4" : "#f8fafc";
+            return h('div',{key:r.id,
+              onClick: esNuevo ? null : ()=>toggle(r.numero),
+              style:{minWidth:240,flex:"0 0 240px",background:bgColor,borderRadius:12,padding:"14px 16px",border:"2.5px solid "+borderColor,cursor:esNuevo?"default":"pointer",transition:"all 0.15s"}},
+              h('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}},
+                h('div',null,
+                  h('div',{style:{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,color:esNuevo?"#854d0e":esPadreNatural?"#1d4ed8":"#64748b",marginBottom:3}},
+                    esNuevo ? "🆕 Ticket nuevo (hijo)" : esPadreNatural ? "👑 Más antiguo" : "📋 Candidato"),
+                  h('div',{style:{fontFamily:"monospace",fontSize:13,fontWeight:700,color:esNuevo?"#92400e":"#1d4ed8"}},r.numero)),
+                !esNuevo && h('div',{style:{width:20,height:20,borderRadius:"50%",border:"2px solid "+(selec?"#22c55e":"#cbd5e1"),background:selec?"#22c55e":"white",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,color:"white",flexShrink:0}},selec?"✓":"")),
+              h('div',{style:{marginBottom:6}},h('div',{style:labelStyle},"Sector"),h('div',{style:valStyle},r.sector)),
+              h('div',{style:{marginBottom:6}},h('div',{style:labelStyle},"Tipo"),h('div',{style:valStyle},(cat?.icon||"")+" "+(cat?.label||r.cat)+" › "+r.sub)),
+              h('div',{style:{marginBottom:6}},h('div',{style:labelStyle},"Descripción"),h('div',{style:{...valStyle,fontStyle:"italic",fontSize:12,color:"#475569"}},'"'+r.desc.substring(0,80)+(r.desc.length>80?"...":"")+'"')),
+              h('div',{style:{marginBottom:6}},h('div',{style:labelStyle},"Solicitante"),h('div',{style:{...valStyle,fontSize:12}},r.nombre+" ("+r.tipo+")")),
+              h('div',null,h('div',{style:labelStyle},"Ingresado"),h('div',{style:{...valStyle,fontSize:12}},fd(r.createdAt))),
+              (r.ejecutorNombre||r.reclamosHijos?.length>0) && h('div',{style:{marginTop:8,background:"#f0fdf4",borderRadius:8,padding:"6px 8px",fontSize:11}},
+                r.ejecutorNombre && h('div',{style:{color:"#166534",fontWeight:600}},"👤 "+r.ejecutorNombre),
+                r.reclamosHijos?.length>0 && h('div',{style:{color:"#15803d"}},"🔗 "+r.reclamosHijos.length+" sub-ticket(s)")));
+          })),
+        seleccionados.size > 0 && h('div',{style:{background:"#f0fdf4",border:"1.5px solid #bbf7d0",borderRadius:10,padding:"10px 14px",marginBottom:16,fontSize:13}},
+          h('div',{style:{fontWeight:700,color:"#15803d",marginBottom:4}},"✅ "+seleccionados.size+" candidato(s) seleccionado(s) + el ticket nuevo"),
+          h('div',{style:{color:"#166534"}},"Padre: "+candidatos.filter(c=>seleccionados.has(c.numero))[0]?.numero+" (el más antiguo seleccionado)")),
         h('div',{style:{display:"flex",gap:10}},
-          h('button',{onClick:onDescartar,
-            style:{flex:1,padding:"13px",background:"white",color:"#64748b",border:"2px solid #e2e8f0",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:600}},
-            "No son el mismo problema"),
-          h('button',{onClick:onConsolidar,
-            style:{flex:1,padding:"13px",background:"linear-gradient(135deg,#854d0e,#92400e)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700}},
-            "✅ Sí, consolidar como sub-ticket")))));
+          h('button',{onClick:onDescartar,style:{flex:1,padding:"13px",background:"white",color:"#64748b",border:"2px solid #e2e8f0",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:600}},"No hay duplicados"),
+          h('button',{onClick:consolidar,disabled:seleccionados.size===0||confirmando,
+            style:{flex:2,padding:"13px",background:seleccionados.size===0?"#e2e8f0":"linear-gradient(135deg,#854d0e,#92400e)",color:seleccionados.size===0?"#94a3b8":"white",border:"none",borderRadius:10,cursor:seleccionados.size===0?"not-allowed":"pointer",fontSize:14,fontWeight:700}},
+            confirmando?"Consolidando...":seleccionados.size===0?"Seleccioná al menos uno":"✅ Consolidar seleccionados")))));
 }
 
-// ── KANBAN ─────────────────────────────────────────────────────────────────
 function Kanban({recs, onEdit}) {
   return h('div',{style:{display:"flex",gap:14,overflowX:"auto",padding:"0 24px 24px",alignItems:"flex-start"}},
     ...ESTADOS.map(est=>{
@@ -2223,8 +2178,12 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
                   dups.length > 0 && h('span',{style:{display:"inline-block",padding:"2px 7px",borderRadius:6,fontSize:10,fontWeight:700,color:"#854d0e",background:"#fef9c3",whiteSpace:"nowrap",cursor:"pointer"},
                     onClick:(e)=>{
                       e.stopPropagation();
-                      const padre = recs.find(x=>x.numero===dups[0].numero);
-                      if(padre) setModalDup({hijo:r, padre, dup:dups[0]});
+                      const candidatos = dups
+                        .map(d => recs.find(x => x.numero === d.numero))
+                        .filter(Boolean)
+                        .filter(c => !["completada","consolidada"].includes(c.estadoAvance))
+                        .sort((a,b) => new Date(a.createdAt) - new Date(b.createdAt));
+                      if(candidatos.length) setModalDup({hijo:r, candidatos});
                     }},
                     "🔍 "+dups.length+" posible"+(dups.length>1?"s":"")+" duplicado"+(dups.length>1?"s":"")));
               })()),
@@ -2252,47 +2211,48 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
     mainTab==="proyectos" && h(ProyectosTab,{recs,onUpdate,ejecutores}),
     modal && h(EditModal,{rec:modal,onClose:()=>setModal(null),onSave:async u=>{await onUpdate(u,modal);setModal(null);},ejecutores,onUpdateHijo:async u=>{await onUpdate(u,u);},recs}),
     showCfg && h(PanelConfig,{onClose:()=>setShowCfg(false),onSaveEjecutores:ejs=>{setEjecutores(ejs);setShowCfg(false);}}),
-    modalDup && h(ModalDuplicado,{
+    modalDup && h(ModalConsolidacion,{
       hijo: modalDup.hijo,
-      padre: modalDup.padre,
+      candidatos: modalDup.candidatos,
       onClose: ()=>setModalDup(null),
       onDescartar: async()=>{
-        // Marcar como ignorado para no volver a mostrar
+        // Marcar todos los candidatos como ignorados para el ticket hijo
+        const todosNumeros = (modalDup.candidatos||[]).map(c=>c.numero);
         const hijoUpd = {...modalDup.hijo,
-          posiblesDuplicados:(modalDup.hijo.posiblesDuplicados||[]).filter(x=>x.numero!==modalDup.padre.numero),
-          duplicadosIgnorados:[...(modalDup.hijo.duplicadosIgnorados||[]),modalDup.padre.numero]};
+          duplicadosIgnorados:[...new Set([...(modalDup.hijo.duplicadosIgnorados||[]),...todosNumeros])]};
         await onUpdate(hijoUpd, modalDup.hijo);
         setModalDup(null);
       },
-      onConsolidar: async()=>{
-        const {hijo, padre} = modalDup;
+      onConsolidar: async(padre, hijos)=>{
         const appUrl = window.location.href.split("?")[0];
-        // 1. Actualizar padre: agregar hijo a reclamosHijos
+        // 1. Actualizar padre: agregar todos los hijos a reclamosHijos
+        const hijosNumeros = hijos.map(h=>h.numero);
         const padreUpd = {...padre,
-          reclamosHijos:[...new Set([...(padre.reclamosHijos||[]),hijo.numero])],
-          posiblesDuplicados:(padre.posiblesDuplicados||[]).filter(x=>x.numero!==hijo.numero),
-          comentarios:[...(padre.comentarios||[]),{texto:`Sub-ticket ${hijo.numero} consolidado. Mismo problema reportado por ${hijo.nombre}.`,fecha:new Date().toISOString(),autor:"Sistema"}]};
+          reclamosHijos:[...new Set([...(padre.reclamosHijos||[]),...hijosNumeros])],
+          posiblesDuplicados:(padre.posiblesDuplicados||[]).filter(x=>!hijosNumeros.includes(x.numero)),
+          comentarios:[...(padre.comentarios||[]),{texto:`Sub-tickets consolidados: ${hijosNumeros.join(", ")}.`,fecha:new Date().toISOString(),autor:"Sistema"}]};
         await onUpdate(padreUpd, padre);
-        // 2. Actualizar hijo: heredar todo del padre + marcar consolidada
-        const hijoUpd = {...hijo,
-          estadoAvance:"consolidada",
-          reclamoPadre:padre.numero,
-          ejecutorMail:padre.ejecutorMail||"",
-          ejecutorNombre:padre.ejecutorNombre||"",
-          ejecutorConfirmado:padre.ejecutorConfirmado||false,
-          ejecutores_lista:padre.ejecutores_lista||[],
-          fechaInicioEsperado:padre.fechaInicioEsperado||"",
-          fechaCierre:padre.fechaCierre||"",
-          fechaCierreConfirmada:padre.fechaCierreConfirmada||"",
-          criticidad:padre.criticidad||hijo.criticidad,
-          descripcionResolucion:padre.descripcionResolucion||"",
-          posiblesDuplicados:[],
-          comentarios:[...(hijo.comentarios||[]),{texto:`Consolidada como sub-ticket de ${padre.numero}. Será resuelta en conjunto.`,fecha:new Date().toISOString(),autor:"Sistema"}]};
-        await onUpdate(hijoUpd, hijo);
-        // 3. Notificar al solicitante del hijo
-        if(hijo.email) await sendEmail({to:hijo.email,
-          subject:`[Asturiano] Tu solicitud fue consolidada — ${hijo.numero}`,
-          body:`Hola ${hijo.nombre},\n\nTu solicitud ${hijo.numero} (${hijo.sector}) fue consolidada con otra solicitud sobre el mismo problema.\n\nAmbas serán resueltas juntas como una sola gestión.${padre.fechaCierreConfirmada?"\n\nFecha estimada de resolución: "+fd(padre.fechaCierreConfirmada):""}${padre.ejecutorNombre?"\nEquipo asignado: "+padre.ejecutorNombre:""}\n\nRecibís las mismas notificaciones de avance. Podés seguir el estado:\n${appUrl}?seguimiento=${hijo.numero}\n\n— Equipo de Intendencia Asturiano`});
+        // 2. Actualizar cada hijo
+        for(const hijo of hijos) {
+          const hijoUpd = {...hijo,
+            estadoAvance:"consolidada",
+            reclamoPadre:padre.numero,
+            ejecutorMail:padre.ejecutorMail||"",
+            ejecutorNombre:padre.ejecutorNombre||"",
+            ejecutorConfirmado:padre.ejecutorConfirmado||false,
+            ejecutores_lista:padre.ejecutores_lista||[],
+            fechaInicioEsperado:padre.fechaInicioEsperado||"",
+            fechaCierre:padre.fechaCierre||"",
+            fechaCierreConfirmada:padre.fechaCierreConfirmada||"",
+            criticidad:padre.criticidad||hijo.criticidad,
+            descripcionResolucion:padre.descripcionResolucion||"",
+            posiblesDuplicados:[],
+            comentarios:[...(hijo.comentarios||[]),{texto:`Consolidada como sub-ticket de ${padre.numero}. Será resuelta en conjunto.`,fecha:new Date().toISOString(),autor:"Sistema"}]};
+          await onUpdate(hijoUpd, hijo);
+          if(hijo.email) await sendEmail({to:hijo.email,
+            subject:`[Asturiano] Tu solicitud fue consolidada — ${hijo.numero}`,
+            body:`Hola ${hijo.nombre},\n\nTu solicitud ${hijo.numero} (${hijo.sector}) fue consolidada con otra solicitud sobre el mismo problema.\n\nAmbas serán resueltas juntas como una sola gestión.${padre.fechaCierreConfirmada?"\n\nFecha estimada de resolución: "+fd(padre.fechaCierreConfirmada):""}${padre.ejecutorNombre?"\nEquipo asignado: "+padre.ejecutorNombre:""}\n\nRecibís las mismas notificaciones de avance. Podés seguir el estado:\n${appUrl}?seguimiento=${hijo.numero}\n\n— Equipo de Intendencia Asturiano`});
+        }
         setModalDup(null);
       }
     }));
