@@ -2091,7 +2091,7 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
 
   return h('div',{style:{minHeight:"100vh",background:"#f8fafc"}},
     // Header
-    h('div',{style:{background:"#0f172a",padding:"14px 24px",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10}},
+    h('div',{style:{background:"#0f172a",padding:"14px 8px",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10}},
       h('div',null,
         h('div',{style:{fontSize:11,color:"#60a5fa",letterSpacing:2,textTransform:"uppercase"}},"Panel de "+(area==="administracion"?"Administración":"Intendencia")+" — Asturiano"),
         h('h1',{style:{fontFamily:"'Playfair Display',serif",color:"white",fontSize:22,margin:0}},"Intendencia — Asturiano")),
@@ -2111,7 +2111,7 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
         h('div',{key:s.l,style:{background:"white",borderRadius:12,padding:16,boxShadow:"0 1px 4px rgba(0,0,0,0.08)",borderTop:`3px solid ${s.c}`}},
           h('div',{style:{fontSize:26,fontWeight:800,color:s.c}},s.v),
           h('div',{style:{fontSize:12,color:"#64748b",fontWeight:500}},s.l)))),
-    mainTab==="reclamos" && h('div',{style:{display:"flex",gap:10,padding:"14px 24px 8px",flexWrap:"wrap",alignItems:"center"}},
+    mainTab==="reclamos" && h('div',{style:{display:"flex",gap:10,padding:"10px 8px 6px",flexWrap:"wrap",alignItems:"center"}},
       h('input',{value:filtros.q,onChange:e=>sf("q",e.target.value),placeholder:"🔍 Buscar...",style:{...aS(),minWidth:160}}),
       h('select',{value:filtros.estado,onChange:e=>sf("estado",e.target.value),style:aS()},
         h('option',{value:""},"Todos los estados"),
@@ -2144,10 +2144,10 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
         ...[["lista","☰ Lista"],["kanban","⬜ Kanban"]].map(([id,lbl])=>
           h('button',{key:id,onClick:()=>setView(id),style:{padding:"7px 14px",borderRadius:8,border:"1.5px solid #e2e8f0",background:view===id?"#0f172a":"white",color:view===id?"white":"#64748b",cursor:"pointer",fontSize:12,fontWeight:600}},lbl)))),
     // Lista
-    mainTab==="reclamos" && view==="lista" && h('div',{style:{padding:"0 24px 24px",overflowX:"auto"}},
-      h('table',{style:{width:"100%",borderCollapse:"separate",borderSpacing:"0 5px"}},
-        h('thead',null,h('tr',null,...[["Nº","60px"],["Fecha","75px"],["Solicitante","100px"],["Sector","90px"],["Detalle","120px"],["Prioridad","80px"],["Responsable","90px"],["Ejecutor","90px"],["Acción","110px"],["Estado","90px"],["Cierre","75px"],["Calif.","60px"],["","60px"]].map(([hd,w])=>
-          h('th',{key:hd,style:{textAlign:"left",padding:"6px 6px",fontSize:10,color:"#94a3b8",fontWeight:600,letterSpacing:0.3,textTransform:"uppercase",minWidth:w,maxWidth:w,whiteSpace:"nowrap",overflow:"hidden"}},hd)))),
+    mainTab==="reclamos" && view==="lista" && h('div',{style:{padding:"0 8px 24px",overflowX:"auto"}},
+      h('table',{style:{width:"100%",borderCollapse:"separate",borderSpacing:"0 3px",fontSize:"11px"}},
+        h('thead',null,h('tr',null,...[["Nº","50px"],["Fecha","70px"],["Solicitante","90px"],["Sector","85px"],["Detalle","110px"],["Prioridad","75px"],["Responsable","85px"],["Ejecutor","85px"],["Acción","100px"],["Estado","85px"],["Cierre","70px"],["Calif.","55px"],["","55px"]].map(([hd,w])=>
+          h('th',{key:hd,style:{textAlign:"left",padding:"6px 4px",fontSize:10,color:"#94a3b8",fontWeight:600,letterSpacing:0.3,textTransform:"uppercase",minWidth:w,maxWidth:w,whiteSpace:"nowrap",overflow:"hidden"}},hd)))),
         h('tbody',null,
           !filtrados.length && h('tr',null,h('td',{colSpan:13,style:{textAlign:"center",padding:40,color:"#94a3b8"}},"No hay solicitudes")),
           ...filtrados.map(r=>{
@@ -3042,5 +3042,6 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
+
 
 
