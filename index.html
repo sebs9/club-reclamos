@@ -1210,7 +1210,7 @@ Resolución: ${descripcion||"—"}`});
               h('div',null,h('label',{style:{display:"block",fontSize:10,fontWeight:600,color:"#374151",marginBottom:4,textTransform:"uppercase"}},"Hora fin"),
                 h('input',{type:"time",value:f.horaFin||"",onChange:e=>set("horaFin",e.target.value),style:aS()})))),
           h('div',{style:{marginBottom:14}},h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Presupuesto ($)"),h('input',{value:f.presupuesto,onChange:e=>set("presupuesto",e.target.value),placeholder:"0",type:"number",style:aS()})),
-          h('div',{style:{marginBottom:14}},h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Detalle del presupuesto"),h('textarea',{value:f.presupuestoDetalle,onChange:e=>set("presupuestoDetalle",e.target.value),rows:2,placeholder:"Conceptos...",style:{...aS(),resize:"vertical"}})),
+          h('div',{style:{marginBottom:14}},h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Detalle del presupuesto"),h('textarea',{value:f.presupuestoDetalle,onChange:e=>set("presupuestoDetalle",e.target.value),rows:2,placeholder:"Conceptos...",style:{...aS(),resize:"vertical"}}))),
 
         // TAB ASIGNACIÓN
         tab==="asignacion" && h('div',null,
@@ -3058,7 +3058,6 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
-
 
 
 
