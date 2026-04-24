@@ -1868,8 +1868,6 @@ function ModalProyecto({proyecto, onClose, onSave, ejecutores, recs}) {
           h('button',{onClick:save,style:{flex:2,padding:"12px",background:"linear-gradient(135deg,#7c3aed,#5b21b6)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700}},"Guardar proyecto ✓")))));
 }
 
-}
-
 // ── RECURRENCIAS ────────────────────────────────────────────────────────────
 
 async function sbGetRecurrencias() {
@@ -1980,10 +1978,10 @@ function RecurrenciasTab({area, ejecutores, recs}) {
                     h('span',{style:{padding:"2px 8px",borderRadius:20,fontSize:11,fontWeight:700,color:critColor,background:critColor+"22"}},crit.toUpperCase()),
                     !rec.activa && h('span',{style:{padding:"2px 8px",borderRadius:20,fontSize:11,fontWeight:700,color:"#64748b",background:"#f1f5f9"}},"PAUSADA")),
                   h('div',{style:{fontSize:12,color:"#64748b",display:"flex",gap:16,flexWrap:"wrap"}},
-                    h('span',null,CATS[rec.cat]?.label||rec.cat," — ",rec.sector),
+                    h('span',null,(CATS[rec.cat]&&CATS[rec.cat].label)||rec.cat," — ",rec.sector),
                     h('span',{style:{color:"#8b5cf6",fontWeight:600}},
                       rec.patron==="personalizado" ? `Cada ${rec.intervaloDias} días`
-                      : rec.patron==="semanal" && rec.diasSemana?.length ? `Semanal: ${(rec.diasSemana||[]).map(d=>DIAS_SEMANA[d]).join(", ")}`
+                      : rec.patron==="semanal" && rec.diasSemana&&rec.diasSemana.length ? `Semanal: ${(rec.diasSemana||[]).map(d=>DIAS_SEMANA[d]).join(", ")}`
                       : PATRON_LABEL[rec.patron]||rec.patron),
                     h('span',null,"Lead: ",rec.leadTimeDias," día"+(rec.leadTimeDias!==1?"s":"")),
                     rec.ejecutorNombre && h('span',null,"Ejecutor: ",rec.ejecutorNombre),
@@ -2090,7 +2088,7 @@ function RecurrenciaModal({rec: recInit, onSave, onClose, ejecutores, cats}) {
           h('label',{style:labelStyle},"Ejecutor (opcional)"),
           h('select',{value:f.ejecutorMail,onChange:e=>{
             const ej=ejecutores.find(x=>x.mail===e.target.value);
-            setF(p=>({...p,ejecutorMail:e.target.value,ejecutorNombre:ej?.nombre||""}));
+            setF(p=>({...p,ejecutorMail:e.target.value,ejecutorNombre:(ej&&ej.nombre)||""}));
           },style:inputStyle},
             h('option',{value:""},"Sin ejecutor asignado"),
             ...(ejecutores||[]).map(e=>h('option',{key:e.mail,value:e.mail},e.nombre||e.mail)))),
@@ -2130,7 +2128,7 @@ function RecurrenciaModal({rec: recInit, onSave, onClose, ejecutores, cats}) {
         f.patron==="mensual" && h('div',{style:sectionStyle},
           h('label',{style:labelStyle},"Día del mes"),
           h('select',{value:f.diaMes,onChange:e=>set("diaMes",Number(e.target.value)),style:{...inputStyle,width:"auto"}},
-            ...[...Array(28)].map((_,i)=>h('option',{key:i+1,value:i+1},i+1)))),
+            ...(function(){var opts=[];for(var i=1;i<=28;i++)opts.push(h('option',{key:i,value:i},i));return opts;}()))),
 
         f.patron==="personalizado" && h('div',{style:sectionStyle},
           h('label',{style:labelStyle},"Cada cuántos días"),
@@ -3012,7 +3010,7 @@ function ValidarDetalleView({recId, recs, setRecs, loaded, setView}) {
             h('div',{style:{...labelStyle,marginBottom:8}},"Fotos del solicitante"),
             h('div',{style:{display:"flex",flexWrap:"wrap",gap:8}},
               ...(rec.adjuntos||[]).filter(a=>a.url).map((a,i)=>
-                a.tipo?.startsWith('image/')
+                a.tipo && a.tipo.startsWith('image/')
                   ? h('a',{key:i,href:a.url,target:"_blank"},h('img',{src:a.url,style:{width:110,height:80,objectFit:"cover",borderRadius:8,border:"1px solid #e2e8f0",display:"block"}}))
                   : h('a',{key:i,href:a.url,target:"_blank",style:{display:"inline-block",padding:"6px 12px",background:"#f1f5f9",borderRadius:6,fontSize:12,color:"#2563eb",textDecoration:"none"}},a.nombre||"archivo")))),
 
@@ -3037,7 +3035,7 @@ function ValidarDetalleView({recId, recs, setRecs, loaded, setView}) {
             h('div',{style:{...labelStyle,marginBottom:8}},"Fotos / evidencia"),
             h('div',{style:{display:"flex",flexWrap:"wrap",gap:8}},
               ...(rec.adjuntosResolucion||[]).filter(a=>a.url).map((a,i)=>
-                a.tipo?.startsWith('image/')
+                a.tipo && a.tipo.startsWith('image/')
                   ? h('a',{key:i,href:a.url,target:"_blank"},h('img',{src:a.url,style:{width:120,height:90,objectFit:"cover",borderRadius:8,border:"1px solid #bbf7d0",display:"block"}}))
                   : h('a',{key:i,href:a.url,target:"_blank",style:{display:"inline-block",padding:"8px 14px",background:"#dcfce7",borderRadius:8,fontSize:13,color:"#15803d",textDecoration:"none",fontWeight:600}},a.nombre||"Ver video")))),
           rec.evidenciaUrl && h('div',{style:{marginTop:4}},
@@ -3153,7 +3151,7 @@ function VerSolicitudPublica({recId, recs, loaded}) {
             h('div',{style:{fontSize:11,color:"#16a34a",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}},"Fotos / evidencia"),
             h('div',{style:{display:"flex",flexWrap:"wrap",gap:8}},
               ...(rec.adjuntosResolucion||[]).filter(a=>a.url).map((a,i)=>
-                a.tipo?.startsWith('image/')
+                a.tipo && a.tipo.startsWith('image/')
                   ? h('a',{key:i,href:a.url,target:"_blank"},h('img',{src:a.url,style:{width:110,height:80,objectFit:"cover",borderRadius:8,border:"1px solid #bbf7d0",display:"block"}}))
                   : h('a',{key:i,href:a.url,target:"_blank",style:{display:"inline-block",padding:"6px 12px",background:"#dcfce7",borderRadius:6,fontSize:12,color:"#15803d",textDecoration:"none"}},a.nombre||"archivo"))))),
         // Botón completar si corresponde
@@ -3705,5 +3703,6 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
+
 
 
