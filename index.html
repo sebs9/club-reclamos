@@ -1072,6 +1072,12 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs}) {
     // When marked as completada → set to esperando_validacion (directivo must approve first)
     if((f.estadoAvance==="completada"||f.estadoAvance==="esperando_validacion") && !["completada","esperando_validacion"].includes(rec.estadoAvance) && f.descripcionResolucion.trim()) {
       const appUrl2 = window.location.href.split("?")[0];
+      // Tickets recurrentes: no requieren validación del directivo ni mail al solicitante
+      if (rec.esRecurrente) {
+        savedRec = {...savedRec, estadoAvance:"completada"};
+        await sbUpsert(savedRec);
+        setRecs(prev=>prev.map(r=>r.id===savedRec.id?savedRec:r));
+      } else {
       savedRec = {...savedRec, estadoAvance:"esperando_validacion", fechaEnvioValidacion: new Date().toISOString()};
       await sbUpsert(savedRec);
       setRecs(prev=>prev.map(r=>r.id===savedRec.id?savedRec:r));
@@ -1123,6 +1129,7 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs}) {
           htmlBody,
           body:`Hola,\n\nLa tarea ${savedRec.numero} fue marcada como completada.\n\nSector: ${savedRec.sector}\nProblema: ${savedRec.sub}\nEjecutor: ${savedRec.ejecutorNombre||"—"}\nLo que se hizo: ${savedRec.descripcionResolucion||"—"}\n\nVer y validar: ${verUrl}\n\nSi no respondés en 2 días, el cliente será notificado automáticamente.\n\n— Sistema de Reclamos — Asturiano`});
       }
+      } // cierre else (no recurrente)
     }
     setSending(false);
   };
@@ -1980,6 +1987,44 @@ async function crearTicketDesdeRecurrencia(rec, fechaOcurrencia) {
         "Content-Type":"application/json","Prefer":"return=minimal"},
       body:JSON.stringify({id:ticketId, data:ticket})
     });
+
+    // Si tiene ejecutor → enviar mail de asignación vía GAS
+    if (rec.ejecutorMail && !rec.ejecutorMail.includes('@externo')) {
+      const appUrl = window.location.href.split("?")[0];
+      const htmlEj = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+        <div style="background:#0f172a;padding:20px 24px;border-radius:12px 12px 0 0">
+          <div style="color:#93c5fd;font-size:11px;letter-spacing:2px;text-transform:uppercase;margin-bottom:4px">Sistema de Reclamos</div>
+          <div style="color:white;font-size:18px;font-weight:700">Tarea recurrente asignada</div>
+        </div>
+        <div style="background:white;padding:24px;border-radius:0 0 12px 12px;border:1px solid #e2e8f0">
+          <p style="color:#475569;font-size:15px;margin-top:0">Hola <strong>${rec.ejecutorNombre||rec.ejecutorMail}</strong>, se te asigno la siguiente tarea:</p>
+          <table style="width:100%;font-size:14px;margin-bottom:16px">
+            <tr><td style="padding:4px 0;color:#64748b;width:120px">Numero:</td><td style="font-weight:700;font-family:monospace;color:#8b5cf6">${numero}</td></tr>
+            <tr><td style="padding:4px 0;color:#64748b">Sector:</td><td style="font-weight:600">${rec.sector}</td></tr>
+            <tr><td style="padding:4px 0;color:#64748b">Tarea:</td><td>${rec.sub||rec.nombre}</td></tr>
+            <tr><td style="padding:4px 0;color:#64748b">Fecha:</td><td style="font-weight:700">${fechaStr}</td></tr>
+          </table>
+          ${rec.comentario?`<div style="background:#eff6ff;border-left:3px solid #3b82f6;padding:10px 14px;border-radius:0 8px 8px 0;margin-bottom:16px;font-size:13px;color:#1e40af"><strong>Instrucciones:</strong> ${rec.comentario}</div>`:''}
+          <div style="text-align:center;margin-bottom:12px">
+            <a href="${appUrl}?ver=${ticketId}" style="display:inline-block;padding:10px 24px;background:#2563eb;color:white;text-decoration:none;border-radius:8px;font-size:13px;font-weight:700">Ver solicitud</a>
+          </div>
+          <div style="display:flex;gap:10px;justify-content:center">
+            <a href="${appUrl}?confirmar=${ticketId}" style="display:inline-block;padding:10px 20px;background:#16a34a;color:white;text-decoration:none;border-radius:8px;font-size:13px;font-weight:700">Confirmar</a>
+            <a href="${appUrl}?rechazar=${ticketId}" style="display:inline-block;padding:10px 20px;background:#ef4444;color:white;text-decoration:none;border-radius:8px;font-size:13px;font-weight:700">Rechazar</a>
+          </div>
+        </div>
+      </div>`;
+      const catCfgLocal = getCatCfg(rec.cat);
+      const respMail = (catCfgLocal.responsables||[])[0]?.mail||"";
+      await sendEmail({
+        to: [rec.ejecutorMail],
+        cc: [respMail].filter(Boolean),
+        subject: `[Asturiano] Tarea recurrente asignada — ${numero}: ${rec.sector}`,
+        htmlBody: htmlEj,
+        body: `Hola ${rec.ejecutorNombre||rec.ejecutorMail},\n\nSe te asigno la tarea: ${rec.nombre}\nSector: ${rec.sector}\nFecha: ${fechaStr}\n\nVer: ${appUrl}?ver=${ticketId}\nConfirmar: ${appUrl}?confirmar=${ticketId}\nRechazar: ${appUrl}?rechazar=${ticketId}`
+      });
+    }
+
     console.log("Ticket recurrente creado desde frontend:", numero);
   } catch(e) { console.error("crearTicketDesdeRecurrencia:", e); }
 }
@@ -2003,20 +2048,44 @@ function RecurrenciasTab({area, ejecutores, recs}) {
   };
 
   const guardar = async (rec) => {
+    const esEdicion = rec.id && lista.some(r=>r.id===rec.id);
     await sbUpsertRecurrencia(rec);
-    // Si es recurrencia nueva (o editada), verificar si la primera ocurrencia
-    // ya está dentro de la ventana del lead time → crear ticket ahora
+
+    const hoy = new Date(); hoy.setHours(0,0,0,0);
+    const allRecs = await sbGetAll_reclamos();
+
     if (rec.activa && rec.fechaInicio) {
-      const hoy = new Date(); hoy.setHours(0,0,0,0);
       const fechaOcurrencia = proximaOcurrenciaFrontend(rec, hoy);
       if (fechaOcurrencia) {
         const diasFaltantes = Math.round((fechaOcurrencia - hoy) / 86400000);
-        if (diasFaltantes <= (rec.leadTimeDias||0)) {
-          const yaExiste = (await sbGetAll_reclamos()).some(r =>
-            r.recurrenciaId === rec.id &&
-            r.fechaInicioEsperado === fechaOcurrencia.toISOString().split('T')[0]
-          );
-          if (!yaExiste) await crearTicketDesdeRecurrencia(rec, fechaOcurrencia);
+
+        // Buscar ticket pendiente existente de esta recurrencia (el más próximo no resuelto)
+        const estadosActivos = ["bajo_analisis","en_proceso","sin_resolucion","esperando_validacion"];
+        const ticketsPendientes = allRecs
+          .filter(r => r.recurrenciaId===rec.id && estadosActivos.includes(r.estadoAvance))
+          .sort((a,b) => new Date(a.fechaInicioEsperado||a.createdAt) - new Date(b.fechaInicioEsperado||b.createdAt));
+        const ticketPendiente = ticketsPendientes[0];
+
+        if (esEdicion && ticketPendiente) {
+          // Actualizar el ticket pendiente con los nuevos datos de la recurrencia
+          const updatedTicket = {
+            ...ticketPendiente,
+            sector: rec.sector,
+            cat: rec.cat,
+            sub: rec.sub||rec.nombre,
+            pri: rec.criticidad||"media",
+            criticidad: rec.criticidad||"media",
+            desc: rec.nombre+(rec.comentario?"\n\nInstrucciones: "+rec.comentario:""),
+            ejecutorMail: rec.ejecutorMail||"",
+            ejecutorNombre: rec.ejecutorNombre||"",
+            nuevoComentario: rec.comentario||"",
+            recurrenciaNombre: rec.nombre,
+            updatedAt: new Date().toISOString()
+          };
+          await sbUpsert(updatedTicket);
+        } else if (diasFaltantes <= (rec.leadTimeDias||0) && !ticketPendiente) {
+          // No hay ticket pendiente y ya estamos en ventana → crear uno nuevo
+          await crearTicketDesdeRecurrencia(rec, fechaOcurrencia);
         }
       }
     }
@@ -2857,10 +2926,17 @@ function CompletarView({recId, recs, setRecs, loaded}) {
     const calificarUrl=appUrl+"?calificar="+rec.id;
     const mailCfg=getMailConfig();
     const msgCat={infraestructura:"nuestro equipo de obras e infraestructura revisó y resolvió el inconveniente",mantenimiento:"nuestro equipo de mantenimiento atendió y solucionó el problema",limpieza:"nuestro equipo de limpieza atendió la situación",equipamiento:"el equipamiento fue revisado y el problema fue solucionado",preparacion:"el espacio fue preparado correctamente",servicios:"nuestro equipo de atención al socio gestionó tu consulta",cuotas:"nuestro equipo administrativo revisó y resolvió tu consulta"}[rec.cat]||"nuestro equipo atendió y resolvió el inconveniente";
-    const updated={...rec,estadoAvance:"esperando_validacion",descripcionResolucion:desc,adjuntosResolucion,fechaEnvioValidacion:new Date().toISOString(),updatedAt:new Date().toISOString(),
+    const updated={...rec,estadoAvance: rec.esRecurrente ? "completada" : "esperando_validacion",
+      descripcionResolucion:desc,adjuntosResolucion,
+      fechaEnvioValidacion: rec.esRecurrente ? null : new Date().toISOString(),
+      updatedAt:new Date().toISOString(),
       comentarios:[...(rec.comentarios||[]),{texto:`Ejecutor marcó como completada. Resolución: ${desc}`,fecha:new Date().toISOString(),autor:rec.ejecutorNombre||"Ejecutor"}]};
     await sbUpsert(updated);
     setRecs(prev=>prev.map(r=>r.id===rec.id?updated:r));
+
+    // Si es recurrente → no hay validación del directivo ni mail al solicitante
+    if (rec.esRecurrente) { setSending(false); setDone(true); return; }
+
     // Notificar al directivo para que revise antes de notificar al cliente
     const dirMails=getDirectivos(rec.cat).map(d=>d.mail).filter(Boolean);
     const respMail=getResponsableMail(rec.cat);
@@ -3793,6 +3869,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
+
 
 
 
