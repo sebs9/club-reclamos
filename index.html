@@ -1461,6 +1461,32 @@ function PersonList({list, onRemove, onAdd}) {
       h('button',{onClick:add,style:{padding:"9px 14px",background:"#0f172a",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:600,width:"100%"}},"+ Agregar")));
 }
 
+function PersonListWithJefe({list, onRemove, onAdd, onToggleJefe}) {
+  const [nombre,setNombre] = useState("");
+  const [mail,setMail] = useState("");
+  const iS = () => ({width:"100%",padding:"9px 12px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:13,outline:"none",boxSizing:"border-box"});
+  const add = () => {
+    if(!nombre.trim()||!mail.trim()) return;
+    onAdd({nombre:nombre.trim(),mail:mail.trim(),esJefe:false});
+    setNombre(""); setMail("");
+  };
+  return h('div',null,
+    ...list.map((e,i)=>h('div',{key:i,style:{display:"flex",alignItems:"center",gap:8,marginBottom:6,background:e.esJefe?"#f5f3ff":"#f8fafc",borderRadius:8,padding:"8px 12px",border:e.esJefe?"1.5px solid #c4b5fd":"1.5px solid transparent"}},
+      h('div',{style:{flex:1}},
+        h('div',{style:{display:"flex",alignItems:"center",gap:6}},
+          h('div',{style:{fontSize:13,fontWeight:600,color:"#1e293b"}},e.nombre),
+          e.esJefe && h('span',{style:{fontSize:11,fontWeight:700,color:"#7c3aed",background:"#ede9fe",padding:"1px 7px",borderRadius:10}},"Jefe")),
+        h('div',{style:{fontSize:12,color:"#64748b"}},e.mail)),
+      h('label',{style:{display:"flex",alignItems:"center",gap:4,cursor:"pointer",fontSize:12,color:"#64748b",whiteSpace:"nowrap"}},
+        h('input',{type:"checkbox",checked:!!e.esJefe,onChange:()=>onToggleJefe(i),style:{cursor:"pointer"}}),
+        "Es jefe"),
+      h('button',{onClick:()=>onRemove(i),style:{background:"none",border:"none",cursor:"pointer",color:"#ef4444",fontSize:16}},"✕"))),
+    h('div',{style:{display:"flex",flexDirection:"column",gap:6,marginTop:8}},
+      h('input',{value:nombre,onChange:e=>setNombre(e.target.value),placeholder:"Nombre completo",style:iS()}),
+      h('input',{value:mail,onChange:e=>setMail(e.target.value),placeholder:"Email",type:"email",style:iS(),onKeyDown:e=>e.key==="Enter"&&add()}),
+      h('button',{onClick:add,style:{padding:"9px 14px",background:"#0f172a",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:600,width:"100%"}},"+ Agregar")));
+}
+
 function PanelConfig({onClose, onSaveEjecutores, area}) {
   const defaultCfg = {scriptUrl:"",categorias:{}};
   const [ejs,setEjs] = useState([]);
@@ -1534,10 +1560,15 @@ function PanelConfig({onClose, onSaveEjecutores, area}) {
             h('div',{style:{fontSize:13,fontWeight:700,color:"#0f172a",marginBottom:10}},cat.icon+" "+cat.label),
             h('div',{style:{marginBottom:10}},
               h('div',{style:{fontSize:11,fontWeight:600,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:0.5}},"Responsables (reciben nuevos reclamos y recordatorios)"),
-              h(PersonList,{
+              h(PersonListWithJefe,{
                 list:(cfg.categorias||{})[cat.id]?.responsables||[],
                 onRemove:i=>setCfg(c=>({...c,categorias:{...(c.categorias||{}),[cat.id]:{...(c.categorias?.[cat.id]||{}),responsables:((c.categorias?.[cat.id]?.responsables)||[]).filter((_,idx)=>idx!==i)}}})),
-                onAdd:n=>setCfg(c=>({...c,categorias:{...(c.categorias||{}),[cat.id]:{...(c.categorias?.[cat.id]||{}),responsables:[...((c.categorias?.[cat.id]?.responsables)||[]),n]}}}))})),
+                onAdd:n=>setCfg(c=>({...c,categorias:{...(c.categorias||{}),[cat.id]:{...(c.categorias?.[cat.id]||{}),responsables:[...((c.categorias?.[cat.id]?.responsables)||[]),n]}}})),
+                onToggleJefe:i=>setCfg(c=>{
+                  const resps=[...((c.categorias?.[cat.id]?.responsables)||[])];
+                  resps[i]={...resps[i],esJefe:!resps[i].esJefe};
+                  return {...c,categorias:{...(c.categorias||{}),[cat.id]:{...(c.categorias?.[cat.id]||{}),responsables:resps}}};
+                })})),
             h('div',null,
               h('div',{style:{fontSize:11,fontWeight:600,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:0.5}},"Directivos (reciben escalados)"),
               h(PersonList,{
@@ -3869,6 +3900,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
+
 
 
 
