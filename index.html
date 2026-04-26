@@ -3822,7 +3822,8 @@ function DashboardPanel({recs}) {
       }});
       return ()=>{ if(chartRef.current) chartRef.current.destroy(); };
     },[chartsReady, JSON.stringify(data)]);
-    return h('canvas',{ref,style:{height,width:"100%"}});
+    return h('div',{style:{position:"relative",height:height+"px",width:"100%"}},
+      h('canvas',{ref}));
   };
 
   // ── ESTILOS ───────────────────────────────────────────────────────────────
@@ -3880,7 +3881,7 @@ function DashboardPanel({recs}) {
       sectionTitle("Volumen de solicitudes"),
       h('div',{style:{...card(),marginBottom:20}},
         h('div',{style:{fontSize:14,fontWeight:700,color:"#0f172a",marginBottom:16}},"Tickets por mes por tipo de solicitante"),
-        h(ChartBox,{id:"vol-mes",type:"bar",height:260,
+        h(ChartBox,{id:"vol-mes",type:"bar",height:240,
           data:{
             labels: ticketsPorMes.map(m=>m.label),
             datasets:[
@@ -4469,8 +4470,6 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
-
-
 
 
 
