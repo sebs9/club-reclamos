@@ -3654,6 +3654,7 @@ function DashboardPanel({recs}) {
   const [filtroArea, setFiltroArea] = useState("todas");
   const [filtroPeriodo, setFiltroPeriodo] = useState("30");
   const [filtroEjecutor, setFiltroEjecutor] = useState("");
+  const [granularidad, setGranularidad] = useState("mes"); // "dia" | "semana" | "mes"
   const [chartsReady, setChartsReady] = useState(false);
 
   useEffect(()=>{
@@ -3688,14 +3689,27 @@ function DashboardPanel({recs}) {
 
   // ── CÁLCULOS ──────────────────────────────────────────────────────────────
 
-  // 1. Tickets por mes
+  // 1. Tickets por período (según granularidad)
   const ticketsPorMes = (() => {
     const map = {};
     recsFilt.forEach(r => {
       const d = new Date(r.createdAt);
-      const key = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0");
-      if(!map[key]) map[key] = {label: MESES[d.getMonth()]+" "+String(d.getFullYear()).slice(2), socio:0, empleado:0, otro:0};
-      const tipo = r.tipo === "socio" ? "socio" : r.tipo === "empleado" ? "empleado" : "otro";
+      let key, label;
+      if(granularidad === "dia") {
+        key = d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+        label = String(d.getDate()).padStart(2,"0")+"/"+String(d.getMonth()+1).padStart(2,"0");
+      } else if(granularidad === "semana") {
+        // Número de semana ISO
+        const startOfYear = new Date(d.getFullYear(),0,1);
+        const weekNum = Math.ceil(((d-startOfYear)/86400000+startOfYear.getDay()+1)/7);
+        key = d.getFullYear()+"-W"+String(weekNum).padStart(2,"0");
+        label = "Sem "+weekNum+" '"+String(d.getFullYear()).slice(2);
+      } else {
+        key = d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0");
+        label = MESES[d.getMonth()]+" "+String(d.getFullYear()).slice(2);
+      }
+      if(!map[key]) map[key]={label,socio:0,empleado:0,otro:0};
+      const tipo = r.tipo==="socio"?"socio":r.tipo==="empleado"?"empleado":"otro";
       map[key][tipo]++;
     });
     return Object.entries(map).sort((a,b)=>a[0]>b[0]?1:-1).map(([,v])=>v);
@@ -3865,7 +3879,15 @@ function DashboardPanel({recs}) {
         h('select',{value:filtroEjecutor,onChange:e=>setFiltroEjecutor(e.target.value),
           style:{padding:"8px 12px",borderRadius:8,border:"none",background:"rgba(255,255,255,0.15)",color:"white",fontSize:13,cursor:"pointer"}},
           h('option',{value:"",style:{color:"#0f172a"}},"Todos los ejecutores"),
-          ...ejecutoresUnicos.map(e=>h('option',{key:e.mail,value:e.mail,style:{color:"#0f172a"}},e.nombre))))),
+          ...ejecutoresUnicos.map(e=>h('option',{key:e.mail,value:e.mail,style:{color:"#0f172a"}},e.nombre))),
+        h('div',{style:{display:"flex",background:"rgba(255,255,255,0.1)",borderRadius:8,padding:2}},
+          ...["dia","semana","mes"].map(g=>
+            h('button',{key:g,onClick:()=>setGranularidad(g),
+              style:{padding:"6px 14px",borderRadius:6,border:"none",cursor:"pointer",fontSize:12,fontWeight:600,
+                background:granularidad===g?"white":"transparent",
+                color:granularidad===g?"#0f172a":"rgba(255,255,255,0.7)",
+                transition:"all 0.15s"}},
+              g==="dia"?"Día":g==="semana"?"Semana":"Mes"))))),
 
     h('div',{style:{padding:"24px 24px 0"}},
 
@@ -3880,7 +3902,8 @@ function DashboardPanel({recs}) {
       // ── GRUPO 1: VOLUMEN ─────────────────────────────────────────────────
       sectionTitle("Volumen de solicitudes"),
       h('div',{style:{...card(),marginBottom:20}},
-        h('div',{style:{fontSize:14,fontWeight:700,color:"#0f172a",marginBottom:16}},"Tickets por mes por tipo de solicitante"),
+        h('div',{style:{fontSize:14,fontWeight:700,color:"#0f172a",marginBottom:16}},
+          "Tickets por "+(granularidad==="dia"?"día":granularidad==="semana"?"semana":"mes")+" por tipo de solicitante"),
         h(ChartBox,{id:"vol-mes",type:"bar",height:240,
           data:{
             labels: ticketsPorMes.map(m=>m.label),
