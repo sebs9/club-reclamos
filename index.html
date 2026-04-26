@@ -4086,6 +4086,7 @@ function App() {
   const [showPanelTabs, setShowPanelTabs] = useState(()=>
     sessionStorage.getItem('authInt')==='1' || sessionStorage.getItem('authAdm')==='1' || sessionStorage.getItem('authDash')==='1'
   );
+  const [authInt, setAuthInt]    = useState(()=>sessionStorage.getItem('authInt')==='1');
   const [authAdm, setAuthAdm]    = useState(()=>sessionStorage.getItem('authAdm')==='1');
   const [authDash, setAuthDash]  = useState(()=>sessionStorage.getItem('authDash')==='1');
 
@@ -4490,11 +4491,11 @@ function App() {
         display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}},
       "⚙"),
     view==="socio" && h(FormularioSocio,{onSubmit:add,reclamos:recs}),
-    view==="intendencia" && !authInt && h(Login,{area:"intendencia",onLogin:()=>{setAuthInt(true);sessionStorage.setItem('authInt','1');}}),
+    view==="intendencia" && !authInt && h(Login,{area:"intendencia",onLogin:()=>{setAuthInt(true);setShowPanelTabs(true);sessionStorage.setItem('authInt','1');}}),
     view==="intendencia" && authInt && h(PanelAdmin,{recs:recsFiltrados("intendencia"),onUpdate:upd,onRefresh:()=>sbGetAll().then(setRecs),area:"intendencia"}),
-    view==="administracion" && !authAdm && h(Login,{area:"administracion",onLogin:()=>{setAuthAdm(true);sessionStorage.setItem('authAdm','1');}}),
+    view==="administracion" && !authAdm && h(Login,{area:"administracion",onLogin:()=>{setAuthAdm(true);setShowPanelTabs(true);sessionStorage.setItem('authAdm','1');}}),
     view==="administracion" && authAdm && h(PanelAdmin,{recs:recsFiltrados("administracion"),onUpdate:upd,onRefresh:()=>sbGetAll().then(setRecs),area:"administracion"}),
-    view==="dashboard" && !authDash && h(Login,{area:"dashboard",onLogin:()=>{setAuthDash(true);sessionStorage.setItem('authDash','1');}}),
+    view==="dashboard" && !authDash && h(Login,{area:"dashboard",onLogin:()=>{setAuthDash(true);setShowPanelTabs(true);sessionStorage.setItem('authDash','1');}}),
     view==="dashboard" && authDash && h(DashboardPanel,{recs}));
 }
 
