@@ -219,6 +219,7 @@ function diasDesde(isoDate) {
 }
 const PASS_INTENDENCIA = "intendencia2026";
 const PASS_ADMINISTRACION = "administracion2026";
+const PASS_DASHBOARD = "metricas2026";
 const SUPABASE_URL   = "https://pltfqosqinzufvjpiddr.supabase.co";
 const SUPABASE_KEY   = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBsdGZxb3NxaW56dWZ2anBpZGRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1MjA4NDksImV4cCI6MjA5MTA5Njg0OX0.d-EMCtfVqi6LvtbEdTBvH_ZaXiFJD6oXukPvMpbobXQ";
 const SCRIPT_URL     = "https://script.google.com/macros/s/AKfycbzZh2AxTboR13rjJeUdXSdO7jjUPkZcIPoeWFYUZynkyWkP6LjNbqQxVxpPIvT26Kh6/exec";
@@ -3087,7 +3088,7 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
 // ── LOGIN ──────────────────────────────────────────────────────────────────
 function Login({onLogin, area}) {
   const [p,setP] = useState(""); const [err,setErr] = useState(false);
-  const pass = area==="intendencia" ? PASS_INTENDENCIA : PASS_ADMINISTRACION;
+  const pass = area==="intendencia" ? PASS_INTENDENCIA : area==="administracion" ? PASS_ADMINISTRACION : PASS_DASHBOARD;
   const areaLabel = area==="intendencia" ? "Intendencia" : "Administración";
   const areaIcon = area==="intendencia" ? "🔧" : "📊";
   const go = () => { if(p===pass){onLogin();}else{setErr(true);setTimeout(()=>setErr(false),2000);} };
@@ -3647,6 +3648,393 @@ function CalificarView({recId, recs, setRecs, loaded}) {
 }
 
 // ── APP ROOT ───────────────────────────────────────────────────────────────
+// ── DASHBOARD DE MÉTRICAS ──────────────────────────────────────────────────
+
+function DashboardPanel({recs}) {
+  const [filtroArea, setFiltroArea] = useState("todas");
+  const [filtroPeriodo, setFiltroPeriodo] = useState("30");
+  const [filtroEjecutor, setFiltroEjecutor] = useState("");
+  const [chartsReady, setChartsReady] = useState(false);
+
+  useEffect(()=>{
+    if(window.Chart) { setChartsReady(true); return; }
+    const s = document.createElement('script');
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js";
+    s.onload = ()=>setChartsReady(true);
+    document.head.appendChild(s);
+  },[]);
+
+  // Filtrar recs según filtros
+  const ahora = new Date();
+  const diasPeriodo = filtroPeriodo === "all" ? 9999 : Number(filtroPeriodo);
+  const fechaCorte = new Date(ahora.getTime() - diasPeriodo * 86400000);
+
+  const recsFilt = recs.filter(r => {
+    if(filtroArea !== "todas") {
+      const cats = filtroArea === "intendencia" ? CATS_INTENDENCIA : CATS_ADMINISTRACION;
+      if(!cats.includes(r.cat)) return false;
+    }
+    if(filtroEjecutor && r.ejecutorMail !== filtroEjecutor) return false;
+    return new Date(r.createdAt) >= fechaCorte;
+  });
+
+  // Todos los ejecutores únicos
+  const ejecutoresUnicos = [...new Map(
+    recs.filter(r=>r.ejecutorMail&&r.ejecutorNombre).map(r=>[r.ejecutorMail,r.ejecutorNombre])
+  ).entries()].map(([mail,nombre])=>({mail,nombre}));
+
+  const CAT_LABEL = {infraestructura:"Obras",mantenimiento:"Mantenimiento",limpieza:"Limpieza",preparacion:"Preparación",servicios:"Servicios",cuotas:"Cuotas"};
+  const MESES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+
+  // ── CÁLCULOS ──────────────────────────────────────────────────────────────
+
+  // 1. Tickets por mes
+  const ticketsPorMes = (() => {
+    const map = {};
+    recsFilt.forEach(r => {
+      const d = new Date(r.createdAt);
+      const key = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0");
+      if(!map[key]) map[key] = {label: MESES[d.getMonth()]+" "+String(d.getFullYear()).slice(2), socio:0, empleado:0, otro:0};
+      const tipo = r.tipo === "socio" ? "socio" : r.tipo === "empleado" ? "empleado" : "otro";
+      map[key][tipo]++;
+    });
+    return Object.entries(map).sort((a,b)=>a[0]>b[0]?1:-1).map(([,v])=>v);
+  })();
+
+  // 2. Top sectores
+  const topSectores = (() => {
+    const map = {};
+    recsFilt.forEach(r=>{ map[r.sector]=(map[r.sector]||0)+1; });
+    return Object.entries(map).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  })();
+
+  // 3. Top mails solicitantes
+  const topMails = (() => {
+    const map = {};
+    recsFilt.filter(r=>r.email).forEach(r=>{ map[r.email]=(map[r.email]||0)+1; });
+    return Object.entries(map).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  })();
+
+  // 4. Distribución por estado actual
+  const distEstados = (() => {
+    const map = {bajo_analisis:0, en_proceso:0, completada:0, esperando_validacion:0, sin_resolucion:0};
+    recsFilt.forEach(r=>{ if(map[r.estadoAvance]!==undefined) map[r.estadoAvance]++; else map["otro"]=(map["otro"]||0)+1; });
+    return map;
+  })();
+
+  // 5. Tiempo promedio de resolución por área
+  const tiempoPromPorArea = (() => {
+    const map = {};
+    recsFilt.filter(r=>r.estadoAvance==="completada"&&r.createdAt&&r.updatedAt).forEach(r=>{
+      const dias = (new Date(r.updatedAt)-new Date(r.createdAt))/86400000;
+      const label = CAT_LABEL[r.cat]||r.cat;
+      if(!map[label]) map[label]={sum:0,count:0};
+      map[label].sum+=dias; map[label].count++;
+    });
+    return Object.entries(map).map(([label,{sum,count}])=>({label,avg:Math.round(sum/count*10)/10}));
+  })();
+
+  // 6. % dentro de plazo
+  const PLAZOS_MAP = {urgente:1,alta:2,media:3,baja:5};
+  const enPlazo = recsFilt.filter(r=>r.estadoAvance==="completada").filter(r=>{
+    const plazo = PLAZOS_MAP[r.criticidad||r.pri||"media"]||3;
+    const dias = (new Date(r.updatedAt)-new Date(r.createdAt))/86400000;
+    return dias <= plazo;
+  }).length;
+  const completadas = recsFilt.filter(r=>r.estadoAvance==="completada").length;
+
+  // 7. Calificación promedio por área
+  const califPorArea = (() => {
+    const map = {};
+    recsFilt.filter(r=>r.calificacion).forEach(r=>{
+      const label = CAT_LABEL[r.cat]||r.cat;
+      if(!map[label]) map[label]={sum:0,count:0};
+      map[label].sum+=r.calificacion; map[label].count++;
+    });
+    return Object.entries(map).map(([label,{sum,count}])=>({label,avg:Math.round(sum/count*10)/10,count}));
+  })();
+
+  // 8. Tasa de reapertura
+  const reabiertas = recsFilt.filter(r=>r.reabierta).length;
+
+  // 9. Tasa de calificación
+  const califTasaPorArea = (() => {
+    const map = {};
+    recsFilt.filter(r=>r.estadoAvance==="completada").forEach(r=>{
+      const label = CAT_LABEL[r.cat]||r.cat;
+      if(!map[label]) map[label]={total:0,calificados:0};
+      map[label].total++;
+      if(r.calificacion) map[label].calificados++;
+    });
+    return Object.entries(map).map(([label,{total,calificados}])=>({label,tasa:Math.round(calificados/total*100),total,calificados}));
+  })();
+
+  // 10. Ranking ejecutores
+  const rankingEjecutores = (() => {
+    const map = {};
+    recsFilt.filter(r=>r.ejecutorNombre).forEach(r=>{
+      if(!map[r.ejecutorNombre]) map[r.ejecutorNombre]={completados:0,sumCalif:0,countCalif:0,rechazos:0};
+      if(r.estadoAvance==="completada") map[r.ejecutorNombre].completados++;
+      if(r.calificacion) { map[r.ejecutorNombre].sumCalif+=r.calificacion; map[r.ejecutorNombre].countCalif++; }
+      if(r.ejecutorRechazado) map[r.ejecutorNombre].rechazos++;
+    });
+    return Object.entries(map).map(([nombre,d])=>({
+      nombre, completados:d.completados,
+      calificacion: d.countCalif>0 ? Math.round(d.sumCalif/d.countCalif*10)/10 : null,
+      rechazos: d.rechazos
+    })).sort((a,b)=>b.completados-a.completados);
+  })();
+
+  // 11. Ranking responsables (por tiempo promedio y tasa plazo)
+  const rankingResponsables = (() => {
+    const map = {};
+    recsFilt.filter(r=>r.estadoAvance==="completada").forEach(r=>{
+      const resp = (()=>{
+        const cc = getCatCfg(r.cat);
+        return (cc.responsables||[])[0]?.nombre||"—";
+      })();
+      if(!map[resp]) map[resp]={tickets:0,sumDias:0,enPlazo:0};
+      const dias = (new Date(r.updatedAt)-new Date(r.createdAt))/86400000;
+      const plazo = PLAZOS_MAP[r.criticidad||r.pri||"media"]||3;
+      map[resp].tickets++;
+      map[resp].sumDias+=dias;
+      if(dias<=plazo) map[resp].enPlazo++;
+    });
+    return Object.entries(map).map(([nombre,d])=>({
+      nombre, tickets:d.tickets,
+      avgDias: Math.round(d.sumDias/d.tickets*10)/10,
+      tasaPlazo: Math.round(d.enPlazo/d.tickets*100)
+    })).sort((a,b)=>b.tickets-a.tickets);
+  })();
+
+  // ── COMPONENTE GRÁFICO ────────────────────────────────────────────────────
+  const ChartBox = ({id, type, data, options, height=220}) => {
+    const ref = React.useRef(null);
+    const chartRef = React.useRef(null);
+    useEffect(()=>{
+      if(!chartsReady||!ref.current) return;
+      if(chartRef.current) chartRef.current.destroy();
+      chartRef.current = new window.Chart(ref.current, {type, data, options:{
+        responsive:true, maintainAspectRatio:false,
+        plugins:{legend:{labels:{font:{family:"DM Sans, sans-serif",size:11},color:"#64748b"}},
+          tooltip:{titleFont:{family:"DM Sans"},bodyFont:{family:"DM Sans"}}},
+        ...options
+      }});
+      return ()=>{ if(chartRef.current) chartRef.current.destroy(); };
+    },[chartsReady, JSON.stringify(data)]);
+    return h('canvas',{ref,style:{height,width:"100%"}});
+  };
+
+  // ── ESTILOS ───────────────────────────────────────────────────────────────
+  const card = (extra={}) => ({background:"white",borderRadius:16,padding:20,boxShadow:"0 2px 8px rgba(0,0,0,0.06)",border:"1px solid #f1f5f9",...extra});
+  const sectionTitle = (txt, sub) => h('div',{style:{marginBottom:20}},
+    h('div',{style:{fontSize:18,fontWeight:800,color:"#0f172a"}}),
+    h('div',{style:{fontSize:18,fontWeight:800,color:"#0f172a"}},txt),
+    sub && h('div',{style:{fontSize:12,color:"#94a3b8",marginTop:2}},sub));
+  const kpiCard = (label,value,color,sub) => h('div',{style:{...card(),textAlign:"center",padding:"20px 16px"}},
+    h('div',{style:{fontSize:32,fontWeight:900,color}}),
+    h('div',{style:{fontSize:32,fontWeight:900,color}},value),
+    h('div',{style:{fontSize:12,color:"#64748b",marginTop:4,fontWeight:600}},label),
+    sub && h('div',{style:{fontSize:11,color:"#94a3b8",marginTop:2}},sub));
+
+  const COLORS = ["#3b82f6","#8b5cf6","#22c55e","#f97316","#ef4444","#eab308","#06b6d4","#ec4899"];
+
+  if(!chartsReady) return h('div',{style:{padding:60,textAlign:"center",color:"#64748b"}},"Cargando dashboard...");
+
+  return h('div',{style:{minHeight:"100vh",background:"#f1f5f9",paddingBottom:80}},
+    // Header
+    h('div',{style:{background:"linear-gradient(135deg,#0f172a,#1e3a5f)",padding:"24px 28px 20px"}},
+      h('div',{style:{color:"#93c5fd",fontSize:11,letterSpacing:2,textTransform:"uppercase",marginBottom:4}},"Centro Asturiano de Buenos Aires"),
+      h('div',{style:{color:"white",fontSize:24,fontWeight:800,marginBottom:16}},"Dashboard de Métricas"),
+      // Filtros
+      h('div',{style:{display:"flex",gap:10,flexWrap:"wrap"}},
+        h('select',{value:filtroArea,onChange:e=>setFiltroArea(e.target.value),
+          style:{padding:"8px 12px",borderRadius:8,border:"none",background:"rgba(255,255,255,0.15)",color:"white",fontSize:13,cursor:"pointer"}},
+          h('option',{value:"todas",style:{color:"#0f172a"}},"Todas las áreas"),
+          h('option',{value:"intendencia",style:{color:"#0f172a"}},"Intendencia"),
+          h('option',{value:"administracion",style:{color:"#0f172a"}},"Administración")),
+        h('select',{value:filtroPeriodo,onChange:e=>setFiltroPeriodo(e.target.value),
+          style:{padding:"8px 12px",borderRadius:8,border:"none",background:"rgba(255,255,255,0.15)",color:"white",fontSize:13,cursor:"pointer"}},
+          h('option',{value:"7",style:{color:"#0f172a"}},"Últimos 7 días"),
+          h('option',{value:"30",style:{color:"#0f172a"}},"Últimos 30 días"),
+          h('option',{value:"90",style:{color:"#0f172a"}},"Últimos 3 meses"),
+          h('option',{value:"180",style:{color:"#0f172a"}},"Últimos 6 meses"),
+          h('option',{value:"365",style:{color:"#0f172a"}},"Último año"),
+          h('option',{value:"all",style:{color:"#0f172a"}},"Todo el historial")),
+        h('select',{value:filtroEjecutor,onChange:e=>setFiltroEjecutor(e.target.value),
+          style:{padding:"8px 12px",borderRadius:8,border:"none",background:"rgba(255,255,255,0.15)",color:"white",fontSize:13,cursor:"pointer"}},
+          h('option',{value:"",style:{color:"#0f172a"}},"Todos los ejecutores"),
+          ...ejecutoresUnicos.map(e=>h('option',{key:e.mail,value:e.mail,style:{color:"#0f172a"}},e.nombre))))),
+
+    h('div',{style:{padding:"24px 24px 0"}},
+
+      // ── KPIs RÁPIDOS ────────────────────────────────────────────────────
+      h('div',{style:{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:12,marginBottom:28}},
+        kpiCard("Total tickets", recsFilt.length, "#3b82f6"),
+        kpiCard("Completados", completadas, "#22c55e", completadas>0?Math.round(completadas/recsFilt.length*100)+"% del total":""),
+        kpiCard("En curso", recsFilt.filter(r=>["bajo_analisis","en_proceso"].includes(r.estadoAvance)).length, "#f97316"),
+        kpiCard("Dentro de plazo", completadas>0?Math.round(enPlazo/completadas*100)+"%":"—", "#8b5cf6"),
+        kpiCard("Reabiertos", reabiertas, "#ef4444", completadas>0?Math.round(reabiertas/completadas*100)+"% tasa":"")),
+
+      // ── GRUPO 1: VOLUMEN ─────────────────────────────────────────────────
+      sectionTitle("Volumen de solicitudes"),
+      h('div',{style:{...card(),marginBottom:20}},
+        h('div',{style:{fontSize:14,fontWeight:700,color:"#0f172a",marginBottom:16}},"Tickets por mes por tipo de solicitante"),
+        h(ChartBox,{id:"vol-mes",type:"bar",height:260,
+          data:{
+            labels: ticketsPorMes.map(m=>m.label),
+            datasets:[
+              {label:"Socio",data:ticketsPorMes.map(m=>m.socio),backgroundColor:"#3b82f6",borderRadius:4},
+              {label:"Empleado",data:ticketsPorMes.map(m=>m.empleado),backgroundColor:"#8b5cf6",borderRadius:4},
+              {label:"Otro",data:ticketsPorMes.map(m=>m.otro),backgroundColor:"#94a3b8",borderRadius:4}
+            ]},
+          options:{scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true,grid:{color:"#f1f5f9"}}},plugins:{legend:{position:"top"}}}})),
+
+      h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:20}},
+        h('div',{style:card()},
+          h('div',{style:{fontSize:14,fontWeight:700,color:"#0f172a",marginBottom:16}},"Top sectores con más problemas"),
+          h(ChartBox,{id:"top-sectores",type:"bar",height:220,
+            data:{
+              labels:topSectores.map(([s])=>s.length>20?s.slice(0,18)+"...":s),
+              datasets:[{label:"Tickets",data:topSectores.map(([,n])=>n),
+                backgroundColor:topSectores.map((_,i)=>COLORS[i%COLORS.length]),borderRadius:4}]},
+            options:{indexAxis:"y",scales:{x:{grid:{color:"#f1f5f9"}},y:{grid:{display:false}}},plugins:{legend:{display:false}}}})),
+        h('div',{style:card()},
+          h('div',{style:{fontSize:14,fontWeight:700,color:"#0f172a",marginBottom:16}},"Distribución por estado actual"),
+          h(ChartBox,{id:"dist-estados",type:"doughnut",height:220,
+            data:{
+              labels:["Bajo análisis","En proceso","Completada","Esp. validación","Sin resolución"],
+              datasets:[{data:[distEstados.bajo_analisis,distEstados.en_proceso,distEstados.completada,distEstados.esperando_validacion,distEstados.sin_resolucion],
+                backgroundColor:["#94a3b8","#3b82f6","#22c55e","#8b5cf6","#f97316"],borderWidth:2,borderColor:"white"}]},
+            options:{plugins:{legend:{position:"bottom"}}}}))  ),
+
+      // Top mails solicitantes
+      h('div',{style:{...card(),marginBottom:28}},
+        h('div',{style:{fontSize:14,fontWeight:700,color:"#0f172a",marginBottom:14}},"Top solicitantes por volumen de tickets"),
+        h('div',{style:{overflowX:"auto"}},
+          h('table',{style:{width:"100%",borderCollapse:"collapse",fontSize:13}},
+            h('thead',null,h('tr',null,
+              h('th',{style:{padding:"8px 12px",textAlign:"left",color:"#64748b",fontWeight:600,fontSize:11,borderBottom:"2px solid #f1f5f9"}},"#"),
+              h('th',{style:{padding:"8px 12px",textAlign:"left",color:"#64748b",fontWeight:600,fontSize:11,borderBottom:"2px solid #f1f5f9"}},"Email"),
+              h('th',{style:{padding:"8px 12px",textAlign:"center",color:"#64748b",fontWeight:600,fontSize:11,borderBottom:"2px solid #f1f5f9"}},"Tickets"),
+              h('th',{style:{padding:"8px 12px",textAlign:"left",color:"#64748b",fontWeight:600,fontSize:11,borderBottom:"2px solid #f1f5f9"}},""))),
+            h('tbody',null,...topMails.map(([mail,count],i)=>
+              h('tr',{key:i,style:{borderBottom:"1px solid #f8fafc",background:i%2===0?"white":"#fafafa"}},
+                h('td',{style:{padding:"10px 12px",fontWeight:700,color:"#64748b"}},i+1),
+                h('td',{style:{padding:"10px 12px",color:"#1e293b",fontWeight:500}},mail),
+                h('td',{style:{padding:"10px 12px",textAlign:"center"}},
+                  h('span',{style:{background:"#eff6ff",color:"#3b82f6",fontWeight:700,padding:"3px 10px",borderRadius:20,fontSize:12}},count)),
+                h('td',{style:{padding:"10px 12px"}},
+                  h('div',{style:{background:"#e2e8f0",borderRadius:4,height:6,width:"100%"}},
+                    h('div',{style:{background:"#3b82f6",borderRadius:4,height:6,width:Math.round(count/topMails[0][1]*100)+"%"}}))))))))),
+
+      // ── GRUPO 2: VELOCIDAD ───────────────────────────────────────────────
+      sectionTitle("Velocidad de resolución"),
+      h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:28}},
+        h('div',{style:card()},
+          h('div',{style:{fontSize:14,fontWeight:700,color:"#0f172a",marginBottom:16}},"Tiempo promedio de resolución (días)"),
+          h(ChartBox,{id:"tiempo-area",type:"bar",height:220,
+            data:{
+              labels:tiempoPromPorArea.map(x=>x.label),
+              datasets:[{label:"Días promedio",data:tiempoPromPorArea.map(x=>x.avg),
+                backgroundColor:tiempoPromPorArea.map((_,i)=>COLORS[i%COLORS.length]),borderRadius:6}]},
+            options:{scales:{x:{grid:{display:false}},y:{grid:{color:"#f1f5f9"}}},plugins:{legend:{display:false}}}})),
+        h('div',{style:card()},
+          h('div',{style:{fontSize:14,fontWeight:700,color:"#0f172a",marginBottom:16}},"Cumplimiento de plazos"),
+          h(ChartBox,{id:"plazo",type:"doughnut",height:220,
+            data:{
+              labels:["Dentro del plazo","Fuera de plazo"],
+              datasets:[{data:[enPlazo, completadas-enPlazo],
+                backgroundColor:["#22c55e","#ef4444"],borderWidth:2,borderColor:"white"}]},
+            options:{plugins:{legend:{position:"bottom"}}}}))),
+
+      // ── GRUPO 3: CALIDAD ─────────────────────────────────────────────────
+      sectionTitle("Calidad de resolución"),
+      h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:20}},
+        h('div',{style:card()},
+          h('div',{style:{fontSize:14,fontWeight:700,color:"#0f172a",marginBottom:16}},"Calificación promedio por área (1-5)"),
+          califPorArea.length === 0
+            ? h('div',{style:{textAlign:"center",padding:40,color:"#94a3b8",fontSize:13}},"Sin calificaciones en el período")
+            : h(ChartBox,{id:"calif-area",type:"bar",height:220,
+                data:{
+                  labels:califPorArea.map(x=>x.label),
+                  datasets:[{label:"Calificación",data:califPorArea.map(x=>x.avg),
+                    backgroundColor:califPorArea.map(x=>x.avg>=4?"#22c55e":x.avg>=3?"#eab308":"#ef4444"),borderRadius:6}]},
+                options:{scales:{x:{grid:{display:false}},y:{min:0,max:5,grid:{color:"#f1f5f9"}}},plugins:{legend:{display:false}}}})),
+        h('div',{style:card()},
+          h('div',{style:{fontSize:14,fontWeight:700,color:"#0f172a",marginBottom:16}},"Tasa de calificación por área"),
+          califTasaPorArea.length === 0
+            ? h('div',{style:{textAlign:"center",padding:40,color:"#94a3b8",fontSize:13}},"Sin datos en el período")
+            : h(ChartBox,{id:"tasa-calif",type:"bar",height:220,
+                data:{
+                  labels:califTasaPorArea.map(x=>x.label),
+                  datasets:[
+                    {label:"Calificaron",data:califTasaPorArea.map(x=>x.calificados),backgroundColor:"#22c55e",borderRadius:4},
+                    {label:"No calificaron",data:califTasaPorArea.map(x=>x.total-x.calificados),backgroundColor:"#e2e8f0",borderRadius:4}
+                  ]},
+                options:{scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true,grid:{color:"#f1f5f9"}}},plugins:{legend:{position:"top"}}}}))),
+
+      // Correlación resoluciones vs calificaciones
+      h('div',{style:{...card(),marginBottom:28}},
+        h('div',{style:{fontSize:14,fontWeight:700,color:"#0f172a",marginBottom:4}},"Resoluciones completadas vs calificación promedio"),
+        h('div',{style:{fontSize:12,color:"#94a3b8",marginBottom:16}},"Compara volumen completado con satisfacción — ideal: alto volumen + alta calificación"),
+        califPorArea.length === 0
+          ? h('div',{style:{textAlign:"center",padding:40,color:"#94a3b8",fontSize:13}},"Sin calificaciones en el período")
+          : h(ChartBox,{id:"correlacion",type:"bar",height:240,
+              data:{
+                labels:califPorArea.map(x=>x.label),
+                datasets:[
+                  {label:"Completados",data:califPorArea.map(x=>recsFilt.filter(r=>r.estadoAvance==="completada"&&(CAT_LABEL[r.cat]||r.cat)===x.label).length),
+                    backgroundColor:"#3b82f6",borderRadius:4,yAxisID:"y"},
+                  {label:"Calificación promedio",data:califPorArea.map(x=>x.avg),
+                    type:"line",borderColor:"#f97316",backgroundColor:"#f9731620",pointBackgroundColor:"#f97316",
+                    borderWidth:2,pointRadius:5,yAxisID:"y1"}
+                ]},
+              options:{scales:{
+                x:{grid:{display:false}},
+                y:{position:"left",grid:{color:"#f1f5f9"},title:{display:true,text:"Completados",color:"#3b82f6"}},
+                y1:{position:"right",min:0,max:5,grid:{display:false},title:{display:true,text:"Calificación",color:"#f97316"}}
+              },plugins:{legend:{position:"top"}}}})),
+
+      // ── GRUPO 4: EQUIPO ──────────────────────────────────────────────────
+      sectionTitle("Performance del equipo"),
+      h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:20}},
+        h('div',{style:card()},
+          h('div',{style:{fontSize:14,fontWeight:700,color:"#0f172a",marginBottom:14}},"Ranking de ejecutores"),
+          rankingEjecutores.length === 0
+            ? h('div',{style:{textAlign:"center",padding:40,color:"#94a3b8",fontSize:13}},"Sin datos")
+            : h('table',{style:{width:"100%",borderCollapse:"collapse",fontSize:12}},
+                h('thead',null,h('tr',null,
+                  ...["Ejecutor","Completados","Calif.","Rechazos"].map(col=>
+                    h('th',{key:col,style:{padding:"8px 10px",textAlign:"left",color:"#64748b",fontWeight:600,fontSize:11,borderBottom:"2px solid #f1f5f9"}},col)))),
+                h('tbody',null,...rankingEjecutores.slice(0,8).map((e,i)=>
+                  h('tr',{key:i,style:{borderBottom:"1px solid #f8fafc",background:i%2===0?"white":"#fafafa"}},
+                    h('td',{style:{padding:"8px 10px",fontWeight:600,color:"#1e293b"}},e.nombre),
+                    h('td',{style:{padding:"8px 10px",textAlign:"center"}},
+                      h('span',{style:{background:"#eff6ff",color:"#3b82f6",fontWeight:700,padding:"2px 8px",borderRadius:12,fontSize:11}},e.completados)),
+                    h('td',{style:{padding:"8px 10px",textAlign:"center",color:e.calificacion>=4?"#16a34a":e.calificacion>=3?"#ca8a04":"#dc2626",fontWeight:700}},
+                      e.calificacion ? "★ "+e.calificacion : "—"),
+                    h('td',{style:{padding:"8px 10px",textAlign:"center",color:e.rechazos>0?"#ef4444":"#22c55e",fontWeight:600}},e.rechazos)))  ))),
+        h('div',{style:card()},
+          h('div',{style:{fontSize:14,fontWeight:700,color:"#0f172a",marginBottom:14}},"Ranking de responsables"),
+          rankingResponsables.length === 0
+            ? h('div',{style:{textAlign:"center",padding:40,color:"#94a3b8",fontSize:13}},"Sin datos")
+            : h('table',{style:{width:"100%",borderCollapse:"collapse",fontSize:12}},
+                h('thead',null,h('tr',null,
+                  ...["Responsable","Tickets","Tiempo prom.","% En plazo"].map(col=>
+                    h('th',{key:col,style:{padding:"8px 10px",textAlign:"left",color:"#64748b",fontWeight:600,fontSize:11,borderBottom:"2px solid #f1f5f9"}},col)))),
+                h('tbody',null,...rankingResponsables.slice(0,8).map((r,i)=>
+                  h('tr',{key:i,style:{borderBottom:"1px solid #f8fafc",background:i%2===0?"white":"#fafafa"}},
+                    h('td',{style:{padding:"8px 10px",fontWeight:600,color:"#1e293b"}},r.nombre),
+                    h('td',{style:{padding:"8px 10px",textAlign:"center"}},r.tickets),
+                    h('td',{style:{padding:"8px 10px",textAlign:"center",color:r.avgDias<=2?"#16a34a":r.avgDias<=5?"#ca8a04":"#dc2626",fontWeight:700}},r.avgDias+"d"),
+                    h('td',{style:{padding:"8px 10px",textAlign:"center"}},
+                      h('span',{style:{background:r.tasaPlazo>=80?"#f0fdf4":"#fef2f2",color:r.tasaPlazo>=80?"#16a34a":"#dc2626",fontWeight:700,padding:"2px 8px",borderRadius:12,fontSize:11}},r.tasaPlazo+"%")))))))),
+
+      h('div',{style:{textAlign:"center",padding:"20px 0",color:"#94a3b8",fontSize:12}},"Centro Asturiano de Buenos Aires — Sistema de Reclamos")
+    ));
+}
+
 function App() {
   // Detect URL params immediately so seguimiento works without login
   const _params = new URLSearchParams(window.location.search);
@@ -3673,6 +4061,7 @@ function App() {
   const [loaded,setLoaded]       = useState(false);
   const [authInt, setAuthInt]    = useState(()=>sessionStorage.getItem('authInt')==='1');
   const [authAdm, setAuthAdm]    = useState(()=>sessionStorage.getItem('authAdm')==='1');
+  const [authDash, setAuthDash]  = useState(()=>sessionStorage.getItem('authDash')==='1');
 
   useEffect(()=>{
     (async()=>{
@@ -4065,19 +4454,21 @@ function App() {
     h('div',{style:{position:"fixed",bottom:20,right:20,zIndex:999,display:"flex",gap:8}},
       navBtn("socio","📋 Formulario", view==="socio"),
       navBtn("intendencia","🔧 Intendencia", view==="intendencia"),
-      navBtn("administracion","📊 Administración", view==="administracion")),
+      navBtn("administracion","📊 Administración", view==="administracion"),
+      navBtn("dashboard","📈 Dashboard", view==="dashboard")),
     view==="socio" && h(FormularioSocio,{onSubmit:add,reclamos:recs}),
     view==="intendencia" && !authInt && h(Login,{area:"intendencia",onLogin:()=>{setAuthInt(true);sessionStorage.setItem('authInt','1');}}),
     view==="intendencia" && authInt && h(PanelAdmin,{recs:recsFiltrados("intendencia"),onUpdate:upd,onRefresh:()=>sbGetAll().then(setRecs),area:"intendencia"}),
     view==="administracion" && !authAdm && h(Login,{area:"administracion",onLogin:()=>{setAuthAdm(true);sessionStorage.setItem('authAdm','1');}}),
-    view==="administracion" && authAdm && h(PanelAdmin,{recs:recsFiltrados("administracion"),onUpdate:upd,onRefresh:()=>sbGetAll().then(setRecs),area:"administracion"}));
+    view==="administracion" && authAdm && h(PanelAdmin,{recs:recsFiltrados("administracion"),onUpdate:upd,onRefresh:()=>sbGetAll().then(setRecs),area:"administracion"}),
+    view==="dashboard" && !authDash && h(Login,{area:"dashboard",onLogin:()=>{setAuthDash(true);sessionStorage.setItem('authDash','1');}}),
+    view==="dashboard" && authDash && h(DashboardPanel,{recs}));
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
 </script>
 </body>
 </html>
-
 
 
 
