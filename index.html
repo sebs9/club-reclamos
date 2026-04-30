@@ -4055,6 +4055,163 @@ function DashboardPanel({recs}) {
                     h('td',{style:{padding:"8px 10px",textAlign:"center"}},
                       h('span',{style:{background:r.tasaPlazo>=80?"#f0fdf4":"#fef2f2",color:r.tasaPlazo>=80?"#16a34a":"#dc2626",fontWeight:700,padding:"2px 8px",borderRadius:12,fontSize:11}},r.tasaPlazo+"%")))))))),
 
+      // ── GRUPO 5: SOLICITANTES ─────────────────────────────────────────────
+      (() => {
+        // Agrupar por mail OR celular
+        const grupos = {};
+        recsFilt.forEach(r => {
+          const mail = (r.email||"").toLowerCase().trim();
+          const cel = (r.celular||"").replace(/\D/g,"").trim();
+          // Buscar si ya existe por mail o celular
+          let keyExistente = null;
+          if(mail) keyExistente = Object.keys(grupos).find(k => grupos[k].mails.includes(mail));
+          if(!keyExistente && cel) keyExistente = Object.keys(grupos).find(k => grupos[k].celulares.includes(cel));
+          const key = keyExistente || (mail || cel || "anonimo_"+Math.random());
+          if(!grupos[key]) grupos[key] = {nombre:r.nombre||"—", mail, celular:r.celular||"", tipo:r.tipo||"—", mails:[], celulares:[], tickets:[], sumCalif:0, countCalif:0, reabiertos:0};
+          if(mail && !grupos[key].mails.includes(mail)) grupos[key].mails.push(mail);
+          if(cel && !grupos[key].celulares.includes(cel)) grupos[key].celulares.push(cel);
+          grupos[key].tickets.push(r);
+          if(r.calificacion) { grupos[key].sumCalif+=r.calificacion; grupos[key].countCalif++; }
+          if(r.reabierta) grupos[key].reabiertos++;
+        });
+
+        const solicitantes = Object.values(grupos).map(g => ({
+          ...g,
+          total: g.tickets.length,
+          ultimoTicket: g.tickets.sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt))[0],
+          califPromedio: g.countCalif>0 ? Math.round(g.sumCalif/g.countCalif*10)/10 : null
+        }));
+
+        const [sortBy, setSortBy] = React.useState("total");
+        const [sortDir, setSortDir] = React.useState("desc");
+        const [filtroTipo, setFiltroTipo] = React.useState("");
+        const [busqueda, setBusqueda] = React.useState("");
+        const [seleccionado, setSeleccionado] = React.useState(null);
+
+        const toggleSort = (col) => {
+          if(sortBy===col) setSortDir(d=>d==="asc"?"desc":"asc");
+          else { setSortBy(col); setSortDir("desc"); }
+        };
+
+        const filtrados = solicitantes
+          .filter(s => !filtroTipo || s.tipo===filtroTipo)
+          .filter(s => !busqueda || s.nombre.toLowerCase().includes(busqueda.toLowerCase()) || s.mail.includes(busqueda.toLowerCase()))
+          .sort((a,b) => {
+            const va = sortBy==="total"?a.total : sortBy==="calif"?(a.califPromedio||0) : sortBy==="ultimo"?new Date(a.ultimoTicket?.createdAt||0) : a.nombre;
+            const vb = sortBy==="total"?b.total : sortBy==="calif"?(b.califPromedio||0) : sortBy==="ultimo"?new Date(b.ultimoTicket?.createdAt||0) : b.nombre;
+            return sortDir==="desc" ? (vb>va?1:-1) : (va>vb?1:-1);
+          });
+
+        const top10 = [...solicitantes].sort((a,b)=>b.total-a.total).slice(0,10);
+
+        const thStyle = {padding:"8px 12px",textAlign:"left",color:"#64748b",fontWeight:600,fontSize:11,borderBottom:"2px solid #f1f5f9",cursor:"pointer",whiteSpace:"nowrap",userSelect:"none"};
+        const sortIcon = (col) => sortBy===col ? (sortDir==="desc"?" ↓":" ↑") : " ↕";
+
+        return h('div',null,
+          sectionTitle("Solicitantes", solicitantes.length+" solicitantes únicos identificados"),
+
+          // Gráfico top 10 + filtros en la misma fila
+          h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:20}},
+            h('div',{style:card()},
+              h('div',{style:{fontSize:14,fontWeight:700,color:"#0f172a",marginBottom:16}},"Top 10 solicitantes por volumen"),
+              h(ChartBox,{id:"top-sol",type:"bar",height:220,
+                data:{
+                  labels: top10.map(s=>s.nombre.split(" ")[0]),
+                  datasets:[{label:"Tickets",data:top10.map(s=>s.total),
+                    backgroundColor:top10.map((_,i)=>COLORS[i%COLORS.length]),borderRadius:4}]},
+                options:{indexAxis:"y",scales:{x:{grid:{color:"#f1f5f9"}},y:{grid:{display:false}}},plugins:{legend:{display:false}}}})),
+            h('div',{style:card()},
+              h('div',{style:{fontSize:14,fontWeight:700,color:"#0f172a",marginBottom:16}},"Distribución por tipo de solicitante"),
+              h(ChartBox,{id:"dist-tipo",type:"doughnut",height:220,
+                data:{
+                  labels:["Socio","Empleado","Directivo","Otro"],
+                  datasets:[{
+                    data:[
+                      solicitantes.filter(s=>s.tipo==="socio").length,
+                      solicitantes.filter(s=>s.tipo==="empleado").length,
+                      solicitantes.filter(s=>s.tipo==="directivo").length,
+                      solicitantes.filter(s=>!["socio","empleado","directivo"].includes(s.tipo)).length
+                    ],
+                    backgroundColor:["#3b82f6","#8b5cf6","#22c55e","#94a3b8"],borderWidth:2,borderColor:"white"}]},
+                options:{plugins:{legend:{position:"bottom"}}}}))),
+
+          // Tabla
+          h('div',{style:{...card(),marginBottom:28}},
+            // Filtros de la tabla
+            h('div',{style:{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap",alignItems:"center"}},
+              h('input',{value:busqueda,onChange:e=>setBusqueda(e.target.value),
+                placeholder:"Buscar por nombre o mail...",
+                style:{padding:"8px 12px",border:"1.5px solid #e2e8f0",borderRadius:8,fontSize:13,flex:1,minWidth:200,outline:"none"}}),
+              h('select',{value:filtroTipo,onChange:e=>setFiltroTipo(e.target.value),
+                style:{padding:"8px 12px",border:"1.5px solid #e2e8f0",borderRadius:8,fontSize:13,outline:"none"}},
+                h('option',{value:""},"Todos los tipos"),
+                h('option',{value:"socio"},"Socios"),
+                h('option',{value:"empleado"},"Empleados"),
+                h('option',{value:"directivo"},"Directivos")),
+              h('div',{style:{fontSize:12,color:"#94a3b8",whiteSpace:"nowrap"}},filtrados.length+" resultados")),
+
+            // Tabla ordenable
+            h('div',{style:{overflowX:"auto"}},
+              h('table',{style:{width:"100%",borderCollapse:"collapse",fontSize:13}},
+                h('thead',null,
+                  h('tr',{style:{background:"#f8fafc"}},
+                    h('th',{style:thStyle,onClick:()=>toggleSort("nombre")},"Nombre"+sortIcon("nombre")),
+                    h('th',{style:thStyle},"Contacto"),
+                    h('th',{style:thStyle},"Tipo"),
+                    h('th',{style:{...thStyle,textAlign:"center"},onClick:()=>toggleSort("total")},"Tickets"+sortIcon("total")),
+                    h('th',{style:{...thStyle,textAlign:"center"},onClick:()=>toggleSort("calif")},"Calif. prom."+sortIcon("calif")),
+                    h('th',{style:{...thStyle,textAlign:"center"}},"Reabiertos"),
+                    h('th',{style:{...thStyle,onClick:()=>toggleSort("ultimo")}},("Último"+sortIcon("ultimo"))),
+                    h('th',{style:thStyle},""))),
+                h('tbody',null,
+                  ...filtrados.slice(0,50).map((s,i)=>
+                    h('tr',{key:i,style:{borderBottom:"1px solid #f8fafc",background:i%2===0?"white":"#fafafa",cursor:"pointer"},
+                      onClick:()=>setSeleccionado(seleccionado?.mail===s.mail?null:s)},
+                      h('td',{style:{padding:"10px 12px",fontWeight:600,color:"#1e293b"}},s.nombre),
+                      h('td',{style:{padding:"10px 12px",color:"#64748b",fontSize:12}},
+                        h('div',null,s.mail),
+                        s.celular && h('div',{style:{color:"#94a3b8"}},s.celular)),
+                      h('td',{style:{padding:"10px 12px"}},
+                        h('span',{style:{padding:"2px 8px",borderRadius:20,fontSize:11,fontWeight:700,
+                          background:s.tipo==="socio"?"#eff6ff":s.tipo==="empleado"?"#f5f3ff":"#f0fdf4",
+                          color:s.tipo==="socio"?"#3b82f6":s.tipo==="empleado"?"#7c3aed":"#16a34a"}},
+                          s.tipo||"—")),
+                      h('td',{style:{padding:"10px 12px",textAlign:"center"}},
+                        h('span',{style:{background:"#eff6ff",color:"#3b82f6",fontWeight:700,padding:"3px 10px",borderRadius:20,fontSize:12}},s.total)),
+                      h('td',{style:{padding:"10px 12px",textAlign:"center",fontWeight:700,
+                        color:s.califPromedio>=4?"#16a34a":s.califPromedio>=3?"#ca8a04":s.califPromedio?"#dc2626":"#94a3b8"}},
+                        s.califPromedio ? "★ "+s.califPromedio : "—"),
+                      h('td',{style:{padding:"10px 12px",textAlign:"center",color:s.reabiertos>0?"#ef4444":"#22c55e",fontWeight:600}},
+                        s.reabiertos||"0"),
+                      h('td',{style:{padding:"10px 12px",color:"#94a3b8",fontSize:12}},
+                        s.ultimoTicket ? fd(s.ultimoTicket.createdAt) : "—"),
+                      h('td',{style:{padding:"10px 12px"}},
+                        h('button',{onClick:e=>{e.stopPropagation();setSeleccionado(seleccionado?.mail===s.mail?null:s);},
+                          style:{padding:"4px 10px",background:"#f1f5f9",border:"none",borderRadius:6,cursor:"pointer",fontSize:11,fontWeight:600,color:"#374151"}},
+                          seleccionado?.mail===s.mail?"Cerrar":"Ver historial"))))),
+
+              // Panel de historial
+              seleccionado && h('div',{style:{marginTop:16,background:"#f8fafc",borderRadius:12,padding:16,border:"1.5px solid #e2e8f0"}},
+                h('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}},
+                  h('div',{style:{fontWeight:700,color:"#1e293b",fontSize:14}},"Historial de "+seleccionado.nombre),
+                  h('div',{style:{fontSize:12,color:"#64748b"}},seleccionado.tickets.length+" tickets en total")),
+                h('div',{style:{display:"flex",flexDirection:"column",gap:8}},
+                  ...seleccionado.tickets
+                    .sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt))
+                    .map((t,i)=>h('div',{key:i,style:{background:"white",borderRadius:8,padding:"10px 14px",border:"1px solid #e2e8f0",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}},
+                      h('div',null,
+                        h('span',{style:{fontFamily:"monospace",fontWeight:700,color:"#3b82f6",fontSize:12}},t.numero),
+                        h('span',{style:{color:"#64748b",fontSize:12}}," — "+t.sector+" / "+t.sub)),
+                      h('div',{style:{display:"flex",gap:8,alignItems:"center"}},
+                        h('span',{style:{fontSize:11,color:"#94a3b8"}},fd(t.createdAt)),
+                        h('span',{style:{padding:"2px 8px",borderRadius:20,fontSize:11,fontWeight:700,
+                          background:t.estadoAvance==="completada"?"#f0fdf4":"#f1f5f9",
+                          color:t.estadoAvance==="completada"?"#16a34a":"#64748b"}},
+                          t.estadoAvance),
+                        t.calificacion && h('span',{style:{color:"#f97316",fontWeight:700,fontSize:12}},"★"+t.calificacion))))))))
+        );
+      })(),
+
       h('div',{style:{textAlign:"center",padding:"20px 0",color:"#94a3b8",fontSize:12}},"Centro Asturiano de Buenos Aires — Sistema de Reclamos")
     ));
 }
