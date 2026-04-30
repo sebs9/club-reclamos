@@ -1356,6 +1356,7 @@ Resolución: ${descripcion||"—"}`});
             h('div',null,h('div',{style:{fontSize:10,color:"#94a3b8",fontWeight:600,marginBottom:2}},"PRIORIDAD"),h(Badge,{color:pri?.color,label:pri?.label,sm:true})),
             h('div',null,h('div',{style:{fontSize:10,color:"#94a3b8",fontWeight:600,marginBottom:2}},"SOLICITANTE"),rec.tipo+" — "+rec.nombre),
             h('div',null,h('div',{style:{fontSize:10,color:"#94a3b8",fontWeight:600,marginBottom:2}},"CELULAR"),rec.celular||"—"),
+            h('div',null,h('div',{style:{fontSize:10,color:"#94a3b8",fontWeight:600,marginBottom:2}},"EMAIL"),rec.email||"—"),
             h('div',null,h('div',{style:{fontSize:10,color:"#94a3b8",fontWeight:600,marginBottom:2}},"INGRESO"),fd(rec.createdAt))),
           h('div',null,h('div',{style:{fontSize:10,color:"#94a3b8",fontWeight:600,marginBottom:3}},"DESCRIPCIÓN"),h('div',{style:{color:"#475569",lineHeight:1.5}},rec.desc)),
           rec.ubicacion && h('div',{style:{marginTop:6,fontSize:12,color:"#64748b"}},"📍 "+rec.ubicacion),
@@ -4641,6 +4642,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
+
 
 
 
