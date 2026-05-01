@@ -793,25 +793,25 @@ function FormularioSocio({onSubmit, reclamos}) {
     setSending(false); setDone(true);
   };
 
-  if (done) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
+  if (done) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#1a3a6b,#0f2347)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
     h('div',{style:{background:"white",borderRadius:20,padding:40,maxWidth:420,width:"100%",textAlign:"center",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}},
       h('div',{style:{fontSize:64,marginBottom:16}},"✅"),
-      h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:26,color:"#0f172a",margin:"0 0 8px"}},"Solicitud registrada"),
+      h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:26,color:"#1a3a6b",margin:"0 0 8px"}},"Solicitud registrada"),
       h('p',{style:{color:"#64748b",marginBottom:24,fontSize:15}},"Tu solicitud fue recibida por el equipo de intendencia."),
       h('div',{style:{background:"#f0fdf4",border:"2px solid #22c55e",borderRadius:12,padding:"16px 24px",marginBottom:24}},
         h('div',{style:{fontSize:12,color:"#64748b",letterSpacing:1,textTransform:"uppercase",marginBottom:4}},"Número de solicitud"),
         h('div',{style:{fontSize:28,fontWeight:800,color:"#15803d",fontFamily:"monospace"}},num)),
       h('p',{style:{fontSize:13,color:"#94a3b8"}},"Guardá este número para hacer seguimiento."),
       h('button',{onClick:()=>{setDone(false);setF({tipo:"",nombre:"",celular:"",email:"",sector:"",cat:"",sub:"",pri:"media",desc:"",ubicacion:"",adjuntos:[]});setDup(null);},
-        style:{marginTop:20,padding:"10px 28px",background:"#0f172a",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:600}},"Nueva solicitud")));
+        style:{marginTop:20,padding:"10px 28px",background:"#1a3a6b",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:600}},"Nueva solicitud")));
 
   const catConf = CATS[f.cat];
   const iS = er => ({width:"100%",padding:"11px 14px",borderRadius:10,border:er?"2px solid #ef4444":"2px solid rgba(255,255,255,0.15)",background:"rgba(255,255,255,0.1)",color:er?"#fca5a5":"white",fontSize:14,outline:"none",boxSizing:"border-box"});
-  const lbl = (text,er) => h('label',{style:{display:"block",fontSize:12,fontWeight:600,color:er?"#f87171":"#93c5fd",letterSpacing:1,textTransform:"uppercase",marginBottom:8}},text);
+  const lbl = (text,er) => h('label',{style:{display:"block",fontSize:12,fontWeight:600,color:er?"#f87171":"#a8c4e8",letterSpacing:1,textTransform:"uppercase",marginBottom:8}},text);
 
-  return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",padding:"20px 16px 80px"}},
+  return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#1a3a6b,#0f2347)",padding:"20px 16px 80px"}},
     h('div',{style:{textAlign:"center",marginBottom:24,paddingTop:20}},
-      h('div',{style:{fontSize:11,letterSpacing:3,color:"#93c5fd",textTransform:"uppercase",marginBottom:8}},"Sistema de Gestión"),
+      h('div',{style:{fontSize:11,letterSpacing:3,color:"#a8c4e8",textTransform:"uppercase",marginBottom:8}},"Sistema de Gestión"),
       h('h1',{style:{fontFamily:"'Playfair Display',serif",fontSize:28,color:"white",fontWeight:900}},"Reportar una Solicitud"),
       h('div',{style:{width:40,height:3,background:"#3b82f6",margin:"10px auto 0",borderRadius:2}})),
     h('div',{style:{maxWidth:500,margin:"0 auto"}},
@@ -845,7 +845,7 @@ function FormularioSocio({onSubmit, reclamos}) {
         // Sector DESPUÉS - dinámico según categoría
         f.cat && h('div',{style:{marginBottom:14}},
           ["servicios","cuotas"].includes(f.cat)
-            ? h('div',{style:{background:"rgba(59,130,246,0.15)",border:"1.5px solid rgba(59,130,246,0.3)",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#93c5fd"}},"📍 Sector asignado automáticamente: Administración")
+            ? h('div',{style:{background:"rgba(59,130,246,0.15)",border:"1.5px solid rgba(59,130,246,0.3)",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#a8c4e8"}},"📍 Sector asignado automáticamente: Administración")
             : h('div',null,
                 lbl("Sector *",err.sector),
                 h('select',{value:f.sector,onChange:e=>set("sector",e.target.value),style:{...iS(err.sector),color:f.sector?"white":"#94a3b8"}},
@@ -873,7 +873,7 @@ function FormularioSocio({onSubmit, reclamos}) {
           h('div',{style:{display:"flex",gap:8,flexWrap:"wrap",marginBottom:f.adjuntos.length?8:0}},
             ...f.adjuntos.map((a,i)=>h('div',{key:i,style:{display:"flex",alignItems:"center",gap:6,background:"rgba(255,255,255,0.1)",borderRadius:8,padding:"5px 10px",fontSize:12}},
               h('span',null,a.tipo?.startsWith("video")?"🎥":"📷"),
-              a.url ? h('a',{href:a.url,target:"_blank",style:{color:"#93c5fd",maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:12}},a.nombre)
+              a.url ? h('a',{href:a.url,target:"_blank",style:{color:"#a8c4e8",maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:12}},a.nombre)
                     : h('span',{style:{color:"white",maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},a.nombre),
               h('button',{onClick:()=>setF(p=>({...p,adjuntos:p.adjuntos.filter((_,idx)=>idx!==i)})),style:{background:"none",border:"none",cursor:"pointer",color:"#ef4444",fontSize:14,padding:0}},"✕")))),
           h('button',{onClick:()=>fileRef.current.click(),style:{padding:"9px 16px",borderRadius:9,border:"1.5px dashed rgba(255,255,255,0.25)",background:"transparent",color:"#94a3b8",cursor:"pointer",fontSize:13}},"📎 Adjuntar foto / video")),
@@ -888,10 +888,10 @@ function PantallaRechazo({onConfirm}) {
   const pending = ls.get("pendingRechazar");
   const rec = pending?.rec;
   const submit = () => { if(!motivo.trim()){setErr(true);return;} onConfirm(motivo.trim()); };
-  return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
+  return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#1a3a6b,#0f2347)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
     h('div',{style:{background:"white",borderRadius:20,padding:36,maxWidth:460,width:"100%",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}},
       h('div',{style:{fontSize:48,textAlign:"center",marginBottom:12}},"Error"),
-      h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:24,color:"#0f172a",margin:"0 0 8px",textAlign:"center"}},"Rechazar tarea"),
+      h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:24,color:"#1a3a6b",margin:"0 0 8px",textAlign:"center"}},"Rechazar tarea"),
       rec && h('div',{style:{background:"#f8fafc",borderRadius:12,padding:14,marginBottom:20,fontSize:13}},
         h('div',{style:{fontWeight:600,color:"#1e293b",marginBottom:4}},rec.numero+" — "+rec.sector),
         h('div',{style:{color:"#64748b"}},rec.desc)),
@@ -1336,7 +1336,7 @@ Resolución: ${descripcion||"—"}`});
   return h('div',{className:"modal-overlay",style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20,overflowY:"auto"}},
     h('div',{className:"modal-card",style:{background:"white",borderRadius:20,width:"100%",maxWidth:580,maxHeight:"93vh",overflowY:"auto"}},
       // Header
-      h('div',{style:{background:"#0f172a",padding:"18px 24px",borderRadius:"20px 20px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center"}},
+      h('div',{style:{background:"#1a3a6b",padding:"18px 24px",borderRadius:"20px 20px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center"}},
         h('div',null,
           h('div',{style:{fontSize:11,color:"#60a5fa",letterSpacing:2,textTransform:"uppercase"}},"Gestionar Solicitud"),
           h('div',{style:{color:"white",fontSize:18,fontWeight:700,fontFamily:"'Playfair Display',serif"}},rec.numero+" — "+rec.sector)),
@@ -1346,7 +1346,7 @@ Resolución: ${descripcion||"—"}`});
       // Tabs
       h('div',{className:"modal-tabs",style:{display:"flex",borderBottom:"2px solid #f1f5f9",padding:"0 20px",overflowX:"auto"}},
         ...TABS.map(([id,lbl])=>h('button',{key:id,onClick:()=>setTab(id),
-          style:{padding:"11px 14px",border:"none",background:"none",cursor:"pointer",fontSize:13,fontWeight:tab===id?700:500,color:tab===id?"#0f172a":"#94a3b8",borderBottom:tab===id?"2px solid #3b82f6":"2px solid transparent",marginBottom:-2,whiteSpace:"nowrap"}},lbl))),
+          style:{padding:"11px 14px",border:"none",background:"none",cursor:"pointer",fontSize:13,fontWeight:tab===id?700:500,color:tab===id?"#1a3a6b":"#94a3b8",borderBottom:tab===id?"2px solid #3b82f6":"2px solid transparent",marginBottom:-2,whiteSpace:"nowrap"}},lbl))),
       h('div',{style:{padding:"18px 22px"}},
         // Info card
         h('div',{style:{background:"#f8fafc",borderRadius:12,padding:14,marginBottom:16,fontSize:13}},
@@ -1483,7 +1483,7 @@ Resolución: ${descripcion||"—"}`});
               : h('div',{style:{display:"flex",flexDirection:"column",gap:6}},
                   h('input',{value:f.empresaNombre||"",onChange:e=>{set("empresaNombre",e.target.value);},placeholder:"Nombre empresa/proveedor",style:aS()}),
                   h('input',{value:f.empresaTelefono||"",onChange:e=>set("empresaTelefono",e.target.value),placeholder:"Teléfono/contacto",style:aS()}),
-                  h('button',{onClick:()=>{if(!f.empresaNombre.trim())return;const ej={nombre:f.empresaNombre,mail:"",telefono:f.empresaTelefono};const l=[...(f.ejecutores_lista||[]),ej];set("ejecutores_lista",l);set("ejecutorMail","tercero");set("ejecutorNombre",l.map(x=>x.nombre).join(", "));set("empresaNombre","");set("empresaTelefono","");},style:{padding:"7px 14px",background:"#0f172a",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600}},"+ Agregar"))),
+                  h('button',{onClick:()=>{if(!f.empresaNombre.trim())return;const ej={nombre:f.empresaNombre,mail:"",telefono:f.empresaTelefono};const l=[...(f.ejecutores_lista||[]),ej];set("ejecutores_lista",l);set("ejecutorMail","tercero");set("ejecutorNombre",l.map(x=>x.nombre).join(", "));set("empresaNombre","");set("empresaTelefono","");},style:{padding:"7px 14px",background:"#1a3a6b",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600}},"+ Agregar"))),
           !rec.ejecutorRechazado && rec.ejecutorConfirmado && h('div',{style:{background:"#f0fdf4",border:"1.5px solid #bbf7d0",borderRadius:10,padding:12,fontSize:13,color:"#15803d",fontWeight:600,marginBottom:12}},"✅ Confirmó el "+fdt(rec.fechaConfirmacion)),
           // Consolidación
           h('div',{style:{marginTop:12,background:"#f8fafc",borderRadius:10,padding:12}},
@@ -1590,7 +1590,7 @@ Resolución: ${descripcion||"—"}`});
         saveErr && h('div',{style:{background:"#fef2f2",border:"1.5px solid #fecaca",borderRadius:8,padding:"10px 14px",marginBottom:10,fontSize:13,color:"#dc2626"}},saveErr),
         h('div',{style:{display:"flex",gap:10,marginTop:4}},
           h('button',{onClick:onClose,style:{flex:1,padding:"12px",background:"#f1f5f9",color:"#64748b",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:600}},"Cancelar"),
-          h('button',{onClick:save,disabled:sending,style:{flex:2,padding:"12px",background:sending?"#94a3b8":"linear-gradient(135deg,#0f172a,#1e3a5f)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700}},sending?"Guardando...":"Guardar ✓")));
+          h('button',{onClick:save,disabled:sending,style:{flex:2,padding:"12px",background:sending?"#94a3b8":"linear-gradient(135deg,#1a3a6b,#0f2347)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700}},sending?"Guardando...":"Guardar ✓")));
 }
 
 // ── PANEL CONFIG ───────────────────────────────────────────────────────────
@@ -1612,7 +1612,7 @@ function PersonList({list, onRemove, onAdd}) {
     h('div',{style:{display:"flex",flexDirection:"column",gap:6,marginTop:8}},
       h('input',{value:nombre,onChange:e=>setNombre(e.target.value),placeholder:"Nombre completo",style:iS()}),
       h('input',{value:mail,onChange:e=>setMail(e.target.value),placeholder:"Email",type:"email",style:iS(),onKeyDown:e=>e.key==="Enter"&&add()}),
-      h('button',{onClick:add,style:{padding:"9px 14px",background:"#0f172a",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:600,width:"100%"}},"+ Agregar")));
+      h('button',{onClick:add,style:{padding:"9px 14px",background:"#1a3a6b",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:600,width:"100%"}},"+ Agregar")));
 }
 
 function PersonListWithJefe({list, onRemove, onAdd, onToggleJefe}) {
@@ -1638,7 +1638,7 @@ function PersonListWithJefe({list, onRemove, onAdd, onToggleJefe}) {
     h('div',{style:{display:"flex",flexDirection:"column",gap:6,marginTop:8}},
       h('input',{value:nombre,onChange:e=>setNombre(e.target.value),placeholder:"Nombre completo",style:iS()}),
       h('input',{value:mail,onChange:e=>setMail(e.target.value),placeholder:"Email",type:"email",style:iS(),onKeyDown:e=>e.key==="Enter"&&add()}),
-      h('button',{onClick:add,style:{padding:"9px 14px",background:"#0f172a",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:600,width:"100%"}},"+ Agregar")));
+      h('button',{onClick:add,style:{padding:"9px 14px",background:"#1a3a6b",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:600,width:"100%"}},"+ Agregar")));
 }
 
 function PanelConfig({onClose, onSaveEjecutores, area}) {
@@ -1691,11 +1691,11 @@ function PanelConfig({onClose, onSaveEjecutores, area}) {
 
   // PersonList is defined outside to prevent re-render focus loss
 
-  const tabStyle = t => ({padding:"8px 14px",border:"none",background:tab===t?"#0f172a":"transparent",color:tab===t?"white":"#64748b",cursor:"pointer",fontSize:13,fontWeight:tab===t?700:500,borderRadius:8});
+  const tabStyle = t => ({padding:"8px 14px",border:"none",background:tab===t?"#1a3a6b":"transparent",color:tab===t?"white":"#64748b",cursor:"pointer",fontSize:13,fontWeight:tab===t?700:500,borderRadius:8});
 
   return h('div',{style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2000,padding:20}},
     h('div',{style:{background:"white",borderRadius:20,width:"100%",maxWidth:560,maxHeight:"93vh",overflowY:"auto"}},
-      h('div',{style:{background:"#0f172a",padding:"18px 24px",borderRadius:"20px 20px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center"}},
+      h('div',{style:{background:"#1a3a6b",padding:"18px 24px",borderRadius:"20px 20px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center"}},
         h('div',{style:{color:"white",fontSize:18,fontWeight:700,fontFamily:"'Playfair Display',serif"}},"⚙️ Configuración"),
         h('button',{onClick:onClose,style:{background:"none",border:"none",color:"#94a3b8",fontSize:22,cursor:"pointer"}},"✕")),
       h('div',{style:{display:"flex",gap:4,padding:"12px 20px 0",background:"#f8fafc",borderBottom:"1px solid #e2e8f0"}},
@@ -1706,14 +1706,14 @@ function PanelConfig({onClose, onSaveEjecutores, area}) {
         // TAB ROLES
         tab==="roles" && h('div',null,
           h('div',{style:{marginBottom:20}},
-            h('div',{style:{fontSize:13,fontWeight:700,color:"#0f172a",marginBottom:4}},"👷 Ejecutores / Empleados"),
+            h('div',{style:{fontSize:13,fontWeight:700,color:"#1a3a6b",marginBottom:4}},"👷 Ejecutores / Empleados"),
             h('div',{style:{fontSize:12,color:"#64748b",marginBottom:10}},"Personas que ejecutan las tareas."),
             h(PersonList,{list:ejs,onRemove:i=>setEjs(e=>e.filter((_,idx)=>idx!==i)),onAdd:n=>setEjs(e=>[...e,n])})),
           h('div',{style:{height:1,background:"#f1f5f9",marginBottom:16}}),
-          h('div',{style:{fontSize:13,fontWeight:700,color:"#0f172a",marginBottom:4}},"📋 Responsables y directivos por área"),
+          h('div',{style:{fontSize:13,fontWeight:700,color:"#1a3a6b",marginBottom:4}},"📋 Responsables y directivos por área"),
           h('div',{style:{fontSize:12,color:"#64748b",marginBottom:14}},"Configurá para cada tipo de problema quiénes reciben los mails y escalados."),
           ...Object.values(CATS).map(cat=>h('div',{key:cat.id,style:{marginBottom:16,background:"#f8fafc",borderRadius:12,padding:"14px 16px"}},
-            h('div',{style:{fontSize:13,fontWeight:700,color:"#0f172a",marginBottom:10}},cat.icon+" "+cat.label),
+            h('div',{style:{fontSize:13,fontWeight:700,color:"#1a3a6b",marginBottom:10}},cat.icon+" "+cat.label),
             h('div',{style:{marginBottom:10}},
               h('div',{style:{fontSize:11,fontWeight:600,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:0.5}},"Responsables (reciben nuevos reclamos y recordatorios)"),
               h(PersonListWithJefe,{
@@ -1735,7 +1735,7 @@ function PanelConfig({onClose, onSaveEjecutores, area}) {
 
         // TAB ESCALADO
         tab==="escalado" && h('div',null,
-          h('div',{style:{fontSize:13,fontWeight:700,color:"#0f172a",marginBottom:12}},"Tiempos para gestionar reclamos"),
+          h('div',{style:{fontSize:13,fontWeight:700,color:"#1a3a6b",marginBottom:12}},"Tiempos para gestionar reclamos"),
           h('div',{style:{background:"#f8fafc",borderRadius:12,overflow:"hidden",marginBottom:16}},
             h('table',{className:"reclamos-table",style:{width:"100%",borderCollapse:"collapse"}},
               h('thead',null,h('tr',null,
@@ -1755,12 +1755,12 @@ function PanelConfig({onClose, onSaveEjecutores, area}) {
         // TAB SISTEMA
         tab==="sistema" && h('div',null,
           h('div',{style:{marginBottom:16}},
-            h('div',{style:{fontSize:13,fontWeight:700,color:"#0f172a",marginBottom:4}},"🔗 Google Apps Script URL"),
+            h('div',{style:{fontSize:13,fontWeight:700,color:"#1a3a6b",marginBottom:4}},"🔗 Google Apps Script URL"),
             h('div',{style:{fontSize:12,color:"#64748b",marginBottom:8}},"URL del script que envía los emails. Requiere contraseña de administrador."),
             !scriptUnlocked
               ? h('div',{style:{display:"flex",gap:8}},
                   h('input',{type:"password",value:scriptPass,onChange:e=>{setScriptPass(e.target.value);setScriptPassErr(false);},placeholder:"Contraseña para editar",style:{...iS(),flex:1,border:scriptPassErr?"2px solid #ef4444":"1.5px solid #e2e8f0"}}),
-                  h('button',{onClick:()=>{if(scriptPass===SCRIPT_PASS){setScriptUnlocked(true);setScriptPassErr(false);}else{setScriptPassErr(true);}},style:{padding:"9px 16px",background:"#0f172a",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:600,whiteSpace:"nowrap"}},"Desbloquear"),
+                  h('button',{onClick:()=>{if(scriptPass===SCRIPT_PASS){setScriptUnlocked(true);setScriptPassErr(false);}else{setScriptPassErr(true);}},style:{padding:"9px 16px",background:"#1a3a6b",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:600,whiteSpace:"nowrap"}},"Desbloquear"),
                   scriptPassErr && h('div',{style:{fontSize:12,color:"#dc2626",marginTop:4}},"Contraseña incorrecta"))
               : h('div',null,
                   h('div',{style:{display:"flex",alignItems:"center",gap:6,marginBottom:6}},
@@ -1768,7 +1768,7 @@ function PanelConfig({onClose, onSaveEjecutores, area}) {
                     h('button',{onClick:()=>{setScriptUnlocked(false);setScriptPass("");},style:{background:"none",border:"none",color:"#94a3b8",cursor:"pointer",fontSize:12}},"Bloquear")),
                   h('input',{value:cfg.scriptUrl||"",onChange:e=>setCfg(c=>({...c,scriptUrl:e.target.value})),placeholder:"https://script.google.com/macros/s/.../exec",style:iS()})))),
 
-        h('button',{onClick:save,style:{width:"100%",padding:"13px",background:saved?"#22c55e":"linear-gradient(135deg,#0f172a,#1e3a5f)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700,transition:"background 0.3s",marginTop:20}},saved?"✅ Guardado":"Guardar configuración"))));
+        h('button',{onClick:save,style:{width:"100%",padding:"13px",background:saved?"#22c55e":"linear-gradient(135deg,#1a3a6b,#0f2347)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700,transition:"background 0.3s",marginTop:20}},saved?"✅ Guardado":"Guardar configuración"))));
 }
 
 // ── MODAL DUPLICADO ────────────────────────────────────────────────────────
@@ -1946,7 +1946,7 @@ function ModalProyecto({proyecto, onClose, onSave, ejecutores, recs}) {
     onClose();
   };
 
-  const tabStyle=t=>({padding:"9px 14px",border:"none",background:tab===t?"#0f172a":"transparent",color:tab===t?"white":"#64748b",cursor:"pointer",fontSize:13,fontWeight:tab===t?700:500,borderRadius:8});
+  const tabStyle=t=>({padding:"9px 14px",border:"none",background:tab===t?"#1a3a6b":"transparent",color:tab===t?"white":"#64748b",cursor:"pointer",fontSize:13,fontWeight:tab===t?700:500,borderRadius:8});
   const estProj=ESTADOS_PROJ.find(e=>e.id===f.estado);
 
   return h('div',{style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1500,padding:20,overflowY:"auto"}},
@@ -2046,7 +2046,7 @@ function ModalProyecto({proyecto, onClose, onSave, ejecutores, recs}) {
                     r && h('div',{style:{fontSize:11,color:"#94a3b8",marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:320}},r.desc)),
                   h('div',{style:{display:"flex",gap:6,alignItems:"center",flexShrink:0,marginLeft:8}},
                     r && h('button',{onClick:()=>setModalSolicitud(r),
-                      style:{padding:"4px 10px",background:"#0f172a",color:"white",border:"none",borderRadius:6,cursor:"pointer",fontSize:11,fontWeight:600,whiteSpace:"nowrap"}},"Gestionar"),
+                      style:{padding:"4px 10px",background:"#1a3a6b",color:"white",border:"none",borderRadius:6,cursor:"pointer",fontSize:11,fontWeight:600,whiteSpace:"nowrap"}},"Gestionar"),
                     h('button',{onClick:()=>set("reclamosVinculados",(f.reclamosVinculados||[]).filter((_,idx)=>idx!==i)),
                       style:{background:"none",border:"none",cursor:"pointer",color:"#ef4444",fontSize:14,padding:"2px 4px"}},"✕"))));
             })),
@@ -2300,10 +2300,10 @@ function RecurrenciasTab({area, ejecutores, recs}) {
     // Header
     h('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}},
       h('div',null,
-        h('div',{style:{fontSize:18,fontWeight:700,color:"#0f172a"}},"Tareas recurrentes"),
+        h('div',{style:{fontSize:18,fontWeight:700,color:"#1a3a6b"}},"Tareas recurrentes"),
         h('div',{style:{fontSize:13,color:"#64748b",marginTop:2}},"Tickets que se generan automáticamente según una frecuencia definida")),
       h('button',{onClick:()=>setModal("nuevo"),
-        style:{padding:"10px 20px",background:"#0f172a",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:700}},
+        style:{padding:"10px 20px",background:"#1a3a6b",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:700}},
         "+ Nueva recurrencia")),
 
     // Lista
@@ -2337,7 +2337,7 @@ function RecurrenciasTab({area, ejecutores, recs}) {
                     style:{padding:"6px 12px",background:rec.activa?"#fff7ed":"#f0fdf4",color:rec.activa?"#c2410c":"#15803d",border:`1.5px solid ${rec.activa?"#fed7aa":"#bbf7d0"}`,borderRadius:7,cursor:"pointer",fontSize:12,fontWeight:600}},
                     rec.activa?"Pausar":"Activar"),
                   h('button',{onClick:()=>setModal(rec),
-                    style:{padding:"6px 12px",background:"#f8fafc",color:"#0f172a",border:"1.5px solid #e2e8f0",borderRadius:7,cursor:"pointer",fontSize:12,fontWeight:600}},
+                    style:{padding:"6px 12px",background:"#f8fafc",color:"#1a3a6b",border:"1.5px solid #e2e8f0",borderRadius:7,cursor:"pointer",fontSize:12,fontWeight:600}},
                     "Editar"),
                   h('button',{onClick:()=>setConfirmDel(rec),
                     style:{padding:"6px 12px",background:"#fef2f2",color:"#dc2626",border:"1.5px solid #fecaca",borderRadius:7,cursor:"pointer",fontSize:12,fontWeight:600}},
@@ -2395,7 +2395,7 @@ function RecurrenciaModal({rec: recInit, onSave, onClose, ejecutores, cats}) {
 
   return h('div',{style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",display:"flex",alignItems:"flex-start",justifyContent:"center",zIndex:1500,padding:"20px 16px",overflowY:"auto"}},
     h('div',{style:{background:"white",borderRadius:16,maxWidth:580,width:"100%",overflow:"hidden",boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}},
-      h('div',{style:{background:"#0f172a",padding:"18px 24px",display:"flex",justifyContent:"space-between",alignItems:"center"}},
+      h('div',{style:{background:"#1a3a6b",padding:"18px 24px",display:"flex",justifyContent:"space-between",alignItems:"center"}},
         h('div',{style:{color:"white",fontSize:16,fontWeight:700}}, recInit.nombre ? "Editar recurrencia" : "Nueva recurrencia"),
         h('button',{onClick:onClose,style:{background:"none",border:"none",color:"rgba(255,255,255,0.6)",fontSize:20,cursor:"pointer",padding:0}},"×")),
       h('div',{style:{padding:24,maxHeight:"80vh",overflowY:"auto"}},
@@ -2448,7 +2448,7 @@ function RecurrenciaModal({rec: recInit, onSave, onClose, ejecutores, cats}) {
 
         // Separador
         h('div',{style:{borderTop:"2px solid #f1f5f9",marginBottom:20}}),
-        h('div',{style:{fontSize:13,fontWeight:700,color:"#0f172a",marginBottom:16}},"Frecuencia"),
+        h('div',{style:{fontSize:13,fontWeight:700,color:"#1a3a6b",marginBottom:16}},"Frecuencia"),
 
         // Patrón
         h('div',{style:sectionStyle},
@@ -2495,7 +2495,7 @@ function RecurrenciaModal({rec: recInit, onSave, onClose, ejecutores, cats}) {
         // Períodos de exclusión
         h('div',{style:{borderTop:"2px solid #f1f5f9",marginBottom:20,marginTop:4}}),
         h('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}},
-          h('div',{style:{fontSize:13,fontWeight:700,color:"#0f172a"}},"Períodos de exclusión"),
+          h('div',{style:{fontSize:13,fontWeight:700,color:"#1a3a6b"}},"Períodos de exclusión"),
           h('button',{onClick:addExclusion,
             style:{padding:"5px 12px",background:"#f1f5f9",color:"#374151",border:"1.5px solid #e2e8f0",borderRadius:7,cursor:"pointer",fontSize:12,fontWeight:600}},
             "+ Agregar período")),
@@ -2521,7 +2521,7 @@ function RecurrenciaModal({rec: recInit, onSave, onClose, ejecutores, cats}) {
         h('div',{style:{display:"flex",gap:10,paddingTop:8,borderTop:"2px solid #f1f5f9"}},
           h('button',{onClick:onClose,style:{flex:1,padding:"11px",background:"#f1f5f9",color:"#374151",border:"none",borderRadius:8,cursor:"pointer",fontSize:14}},"Cancelar"),
           h('button',{onClick:save,disabled:saving,
-            style:{flex:2,padding:"11px",background:saving?"#94a3b8":"linear-gradient(135deg,#0f172a,#1e3a5f)",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:14,fontWeight:700}},
+            style:{flex:2,padding:"11px",background:saving?"#94a3b8":"linear-gradient(135deg,#1a3a6b,#0f2347)",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:14,fontWeight:700}},
             saving?"Guardando...":"Guardar recurrencia")))));
 }
 
@@ -2657,7 +2657,7 @@ function ProyectosTab({recs, onUpdate, ejecutores}) {
           setModal(fresh);
         }},
           h('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}},
-            h('div',{style:{fontSize:15,fontWeight:700,color:"#0f172a",lineHeight:1.3,flex:1}},p.titulo||"Sin título"),
+            h('div',{style:{fontSize:15,fontWeight:700,color:"#1a3a6b",lineHeight:1.3,flex:1}},p.titulo||"Sin título"),
             h('span',{style:{padding:"2px 8px",borderRadius:20,fontSize:11,fontWeight:600,color:est?.color,background:est?.color+"22",whiteSpace:"nowrap",marginLeft:8}},est?.label)),
           p.sector && h('div',{style:{fontSize:12,color:"#64748b",marginBottom:6}},"📍 "+p.sector),
           p.descripcion && h('div',{style:{fontSize:13,color:"#475569",lineHeight:1.5,marginBottom:10,overflow:"hidden",textOverflow:"ellipsis",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}},p.descripcion),
@@ -2844,7 +2844,7 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
 
   return h('div',{style:{minHeight:"100vh",background:"#f8fafc"}},
     // Header
-    h('div',{style:{background:"#0f172a",padding:"14px 8px",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10}},
+    h('div',{style:{background:"#1a3a6b",padding:"14px 8px",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10}},
       h('div',null,
         h('div',{style:{fontSize:11,color:"#60a5fa",letterSpacing:2,textTransform:"uppercase"}},"Panel de "+(area==="administracion"?"Administración":"Intendencia")+" — Asturiano"),
         h('h1',{style:{fontFamily:"'Playfair Display',serif",color:"white",fontSize:22,margin:0}},"Intendencia — Asturiano")),
@@ -2854,13 +2854,13 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
         h('button',{onClick:()=>{const d=prompt("Simular cuántos días transcurridos (ej: 4):");if(d&&!isNaN(d))testAlerts(Number(d));},style:{padding:"8px 14px",background:"rgba(255,255,255,0.1)",color:"white",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600}},"🧪 Test"),
         h('button',{onClick:checkAlerts,disabled:checking,style:{padding:"8px 14px",background:checking?"#475569":"#f97316",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600}},checking?"Verificando...":"⚠️ Revisar alertas"))),
     // Main tabs: Reclamos | Proyectos
-    h('div',{className:"main-tabs",style:{display:"flex",gap:4,padding:"0 24px",background:"#0f172a",borderBottom:"2px solid rgba(255,255,255,0.1)"}},
+    h('div',{className:"main-tabs",style:{display:"flex",gap:4,padding:"0 24px",background:"#1a3a6b",borderBottom:"2px solid rgba(255,255,255,0.1)"}},
       ...[["reclamos","📋 Solicitudes"],["proyectos","🏗️ Proyectos"],["recurrencias","🔁 Recurrencias"]].map(([id,lbl])=>
         h('button',{key:id,onClick:()=>setMainTab(id),
           style:{padding:"10px 18px",border:"none",background:"none",cursor:"pointer",fontSize:13,fontWeight:mainTab===id?700:500,
             color:mainTab===id?"white":"rgba(255,255,255,0.5)",borderBottom:mainTab===id?"2px solid #3b82f6":"2px solid transparent",marginBottom:-2}},lbl))),
     mainTab==="reclamos" && h('div',{className:"badges-wrap",style:{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:12,padding:"18px 24px 0"}},
-      ...[{l:"Total",v:stats.total,c:"#0f172a"},{l:"Bajo Análisis",v:stats.noIniciadas,c:"#6b7280"},{l:"En curso",v:stats.enCurso,c:"#3b82f6"},{l:"Demoradas",v:stats.demoradas,c:"#ef4444"},{l:"Completadas",v:stats.completadas,c:"#22c55e"}].map(s=>
+      ...[{l:"Total",v:stats.total,c:"#1a3a6b"},{l:"Bajo Análisis",v:stats.noIniciadas,c:"#6b7280"},{l:"En curso",v:stats.enCurso,c:"#3b82f6"},{l:"Demoradas",v:stats.demoradas,c:"#ef4444"},{l:"Completadas",v:stats.completadas,c:"#22c55e"}].map(s=>
         h('div',{key:s.l,style:{background:"white",borderRadius:12,padding:16,boxShadow:"0 1px 4px rgba(0,0,0,0.08)",borderTop:`3px solid ${s.c}`}},
           h('div',{style:{fontSize:26,fontWeight:800,color:s.c}},s.v),
           h('div',{style:{fontSize:12,color:"#64748b",fontWeight:500}},s.l)))),
@@ -2895,7 +2895,7 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
         h('option',{value:"criticidad"},"Ordenar: Criticidad")),
       h('div',{style:{marginLeft:"auto",display:"flex",gap:6}},
         ...[["lista","☰ Lista"],["kanban","⬜ Kanban"]].map(([id,lbl])=>
-          h('button',{key:id,onClick:()=>setView(id),style:{padding:"7px 14px",borderRadius:8,border:"1.5px solid #e2e8f0",background:view===id?"#0f172a":"white",color:view===id?"white":"#64748b",cursor:"pointer",fontSize:12,fontWeight:600}},lbl)))),
+          h('button',{key:id,onClick:()=>setView(id),style:{padding:"7px 14px",borderRadius:8,border:"1.5px solid #e2e8f0",background:view===id?"#1a3a6b":"white",color:view===id?"white":"#64748b",cursor:"pointer",fontSize:12,fontWeight:600}},lbl)))),
     // Lista
     mainTab==="reclamos" && view==="lista" && h('div',{style:{padding:"0 8px 24px",overflowX:"auto"}},
       h('table',{style:{width:"100%",borderCollapse:"separate",borderSpacing:"0 3px",fontSize:"11px"}},
@@ -3032,7 +3032,7 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
                     "⚠️ Gestionar"));
               })()),
               h('td',{style:{padding:"6px 4px",borderRadius:"0 10px 10px 0"}},
-                h('button',{onClick:()=>setModal(r),style:{padding:"4px 10px",background:"#0f172a",color:"white",border:"none",borderRadius:7,cursor:"pointer",fontSize:11,fontWeight:600}},"Gestionar")));
+                h('button',{onClick:()=>setModal(r),style:{padding:"4px 10px",background:"#1a3a6b",color:"white",border:"none",borderRadius:7,cursor:"pointer",fontSize:11,fontWeight:600}},"Gestionar")));
           })))),
     mainTab==="reclamos" && view==="kanban" && h(Kanban,{recs:filtrados,onEdit:setModal}),
     mainTab==="proyectos" && h(ProyectosTab,{recs,onUpdate,ejecutores}),
@@ -3093,7 +3093,7 @@ function Login({onLogin, area}) {
   const areaLabel = area==="intendencia" ? "Intendencia" : "Administración";
   const areaIcon = area==="intendencia" ? "🔧" : "📊";
   const go = () => { if(p===pass){onLogin();}else{setErr(true);setTimeout(()=>setErr(false),2000);} };
-  return h('div',{style:{minHeight:"100vh",background:"#0f172a",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
+  return h('div',{style:{minHeight:"100vh",background:"#1a3a6b",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
     h('div',{style:{background:"white",borderRadius:20,padding:36,maxWidth:380,width:"100%",textAlign:"center"}},
       h('div',{style:{fontSize:40,marginBottom:12}},areaIcon),
       h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:22,margin:"0 0 6px"}},"Panel de "+areaLabel+" — Asturiano"),
@@ -3102,7 +3102,7 @@ function Login({onLogin, area}) {
       h('input',{type:"password",value:p,onChange:e=>setP(e.target.value),onKeyDown:e=>e.key==="Enter"&&go(),placeholder:"Contraseña",
         style:{width:"100%",padding:"12px 14px",borderRadius:10,border:err?"2px solid #ef4444":"2px solid #e2e8f0",fontSize:15,outline:"none",marginBottom:12,boxSizing:"border-box"}}),
       err && h('div',{style:{color:"#ef4444",fontSize:13,marginBottom:8}},"Contraseña incorrecta"),
-      h('button',{onClick:go,style:{width:"100%",padding:"13px",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:15,fontWeight:700}},"Ingresar →")));
+      h('button',{onClick:go,style:{width:"100%",padding:"13px",background:"linear-gradient(135deg,#1a3a6b,#0f2347)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:15,fontWeight:700}},"Ingresar →")));
 }
 
 // ── COMPLETAR VIEW (for executor) ────────────────────────────────────────────
@@ -3115,15 +3115,15 @@ function CompletarView({recId, recs, setRecs, loaded}) {
   const fileRef = useRef();
   const [fotos,setFotos] = useState([]);
 
-  if(!loaded) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:18}},"Cargando...");
-  if(!rec) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
+  if(!loaded) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#1a3a6b,#0f2347)",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:18}},"Cargando...");
+  if(!rec) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#1a3a6b,#0f2347)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
     h('div',{style:{background:"white",borderRadius:20,padding:40,maxWidth:420,width:"100%",textAlign:"center"}},
       h('div',{style:{fontSize:48,marginBottom:16}},"🔍"),h('p',{style:{color:"#64748b"}},"Solicitud no encontrada.")));
 
-  if(done) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
+  if(done) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#1a3a6b,#0f2347)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
     h('div',{style:{background:"white",borderRadius:20,padding:40,maxWidth:420,width:"100%",textAlign:"center"}},
       h('div',{style:{fontSize:64,marginBottom:16}},"✅"),
-      h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:24,color:"#0f172a",margin:"0 0 12px"}},"¡Resolución registrada!"),
+      h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:24,color:"#1a3a6b",margin:"0 0 12px"}},"¡Resolución registrada!"),
       h('p',{style:{color:"#64748b",fontSize:15,lineHeight:1.6}},"El responsable fue notificado. El usuario recibirá un email para calificar la resolución."),
       h('p',{style:{color:"#94a3b8",fontSize:13,marginTop:16}},"Podés cerrar esta ventana.")));
 
@@ -3203,9 +3203,9 @@ function CompletarView({recId, recs, setRecs, loaded}) {
     setSending(false);setDone(true);
   };
 
-  return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",padding:"20px 16px 40px"}},
+  return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#1a3a6b,#0f2347)",padding:"20px 16px 40px"}},
     h('div',{style:{textAlign:"center",marginBottom:24,paddingTop:20}},
-      h('div',{style:{fontSize:11,letterSpacing:3,color:"#93c5fd",textTransform:"uppercase",marginBottom:8}},"Confirmación de Resolución"),
+      h('div',{style:{fontSize:11,letterSpacing:3,color:"#a8c4e8",textTransform:"uppercase",marginBottom:8}},"Confirmación de Resolución"),
       h('h1',{style:{fontFamily:"'Playfair Display',serif",fontSize:26,color:"white",fontWeight:900}},rec.numero),
       h('div',{style:{width:40,height:3,background:"#22c55e",margin:"10px auto 0",borderRadius:2}})),
     h('div',{style:{maxWidth:480,margin:"0 auto"}},
@@ -3238,14 +3238,14 @@ function RechazarValidacionView({recId, recs, setRecs, loaded}) {
   const [sending,setSending] = useState(false);
   const hoyStr = () => { const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); };
 
-  if(!loaded) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:18}},"Cargando...");
-  if(!rec) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
+  if(!loaded) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#1a3a6b,#0f2347)",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:18}},"Cargando...");
+  if(!rec) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#1a3a6b,#0f2347)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
     h('div',{style:{background:"white",borderRadius:20,padding:40,maxWidth:420,width:"100%",textAlign:"center"}},
       h('div',{style:{fontSize:48,marginBottom:16}},"🔍"),h('p',{style:{color:"#64748b"}},"Solicitud no encontrada.")));
-  if(done) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
+  if(done) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#1a3a6b,#0f2347)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
     h('div',{style:{background:"white",borderRadius:20,padding:40,maxWidth:420,width:"100%",textAlign:"center"}},
       h('div',{style:{fontSize:64,marginBottom:16}},"🔄"),
-      h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:24,color:"#0f172a",margin:"0 0 12px"}},"Solicitud reabierta"),
+      h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:24,color:"#1a3a6b",margin:"0 0 12px"}},"Solicitud reabierta"),
       h('p',{style:{color:"#64748b",fontSize:15,lineHeight:1.6}},"El responsable fue notificado para retrabajar la resolución."),
       h('p',{style:{color:"#94a3b8",fontSize:13,marginTop:16}},"Podés cerrar esta ventana.")));
 
@@ -3270,7 +3270,7 @@ function RechazarValidacionView({recId, recs, setRecs, loaded}) {
     setSending(false); setDone(true);
   };
 
-  return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",padding:"20px 16px 40px"}},
+  return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#1a3a6b,#0f2347)",padding:"20px 16px 40px"}},
     h('div',{style:{textAlign:"center",marginBottom:24,paddingTop:20}},
       h('div',{style:{fontSize:11,letterSpacing:3,color:"#f9a8d4",textTransform:"uppercase",marginBottom:8}},"Validación de Directivo"),
       h('h1',{style:{fontFamily:"'Playfair Display',serif",fontSize:26,color:"white",fontWeight:900}},rec.numero),
@@ -3300,7 +3300,7 @@ function ValidarDetalleView({recId, recs, setRecs, loaded, setView}) {
   const CATS={infraestructura:"Obras / Infraestructura",mantenimiento:"Mantenimiento Preventivo",limpieza:"Limpieza",preparacion:"Preparacion de espacios",servicios:"Servicios y Atencion",cuotas:"Cuotas y Aranceles"};
   const CRIT_COLOR={urgente:"#ef4444",alta:"#f97316",media:"#eab308",baja:"#22c55e"};
 
-  const wrapStyle={minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"32px 16px"};
+  const wrapStyle={minHeight:"100vh",background:"linear-gradient(135deg,#1a3a6b,#0f2347)",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"32px 16px"};
   const cardStyle={background:"white",borderRadius:16,maxWidth:640,width:"100%",overflow:"hidden",boxShadow:"0 20px 60px rgba(0,0,0,0.4)"};
   const secStyle=(color,bg)=>({background:bg,borderLeft:"4px solid "+color,borderRadius:"0 10px 10px 0",padding:"14px 16px",marginBottom:16});
   const labelStyle={fontSize:11,color:"#94a3b8",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4};
@@ -3365,8 +3365,8 @@ function ValidarDetalleView({recId, recs, setRecs, loaded, setView}) {
 
   return h('div',{style:wrapStyle},
     h('div',{style:cardStyle},
-      h('div',{style:{background:"#0f172a",padding:"20px 24px"}},
-        h('div',{style:{color:"#93c5fd",fontSize:11,letterSpacing:2,textTransform:"uppercase",marginBottom:4}},"Sistema de Reclamos — Validacion Directivo"),
+      h('div',{style:{background:"#1a3a6b",padding:"20px 24px"}},
+        h('div',{style:{color:"#a8c4e8",fontSize:11,letterSpacing:2,textTransform:"uppercase",marginBottom:4}},"Sistema de Reclamos — Validacion Directivo"),
         h('div',{style:{color:"white",fontSize:18,fontWeight:700}},rec.numero+" — "+rec.sector)),
       h('div',{style:{padding:24}},
 
@@ -3448,7 +3448,7 @@ function VerSolicitudPublica({recId, recs, loaded}) {
   const CRIT_COLOR={urgente:"#ef4444",alta:"#f97316",media:"#eab308",baja:"#22c55e"};
   const ESTADO_LABEL={"pendiente":"Pendiente","en_proceso":"En proceso","sin_resolucion":"Sin resolución temporal","esperando_validacion":"Esperando validación","completada":"Completada","bajo_analisis":"En revisión"};
 
-  const wrapStyle={minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"32px 16px"};
+  const wrapStyle={minHeight:"100vh",background:"linear-gradient(135deg,#1a3a6b,#0f2347)",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"32px 16px"};
   const cardStyle={background:"white",borderRadius:16,maxWidth:600,width:"100%",overflow:"hidden",boxShadow:"0 20px 60px rgba(0,0,0,0.4)"};
 
   if(!loaded) return h('div',{style:wrapStyle},
@@ -3478,8 +3478,8 @@ function VerSolicitudPublica({recId, recs, loaded}) {
 
   return h('div',{style:wrapStyle},
     h('div',{style:cardStyle},
-      h('div',{style:{background:"#0f172a",padding:"20px 24px"}},
-        h('div',{style:{color:"#93c5fd",fontSize:11,letterSpacing:2,textTransform:"uppercase",marginBottom:4}},"Sistema de Reclamos — Club Asturiano"),
+      h('div',{style:{background:"#1a3a6b",padding:"20px 24px"}},
+        h('div',{style:{color:"#a8c4e8",fontSize:11,letterSpacing:2,textTransform:"uppercase",marginBottom:4}},"Sistema de Reclamos — Club Asturiano"),
         h('div',{style:{color:"white",fontSize:20,fontWeight:700}},"Detalle de Solicitud")),
       h('div',{style:{padding:24}},
         // Header número + estado
@@ -3507,13 +3507,13 @@ function VerSolicitudPublica({recId, recs, loaded}) {
         // Fechas
         (fechaIni||fechaFin) && h('div',{style:{display:"flex",gap:12,marginBottom:16,flexWrap:"wrap"}},
           fechaIni && h('div',{style:{background:"#eff6ff",borderRadius:10,padding:"10px 14px",flex:1}},
-            h('div',{style:{fontSize:11,color:"#93c5fd",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}},"Fecha inicio"),
+            h('div',{style:{fontSize:11,color:"#a8c4e8",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}},"Fecha inicio"),
             h('div',{style:{fontWeight:700,color:"#1e40af"}},fd(fechaIni))),
           fechaFin && h('div',{style:{background:"#eff6ff",borderRadius:10,padding:"10px 14px",flex:1}},
-            h('div',{style:{fontSize:11,color:"#93c5fd",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}},"Fecha cierre"),
+            h('div',{style:{fontSize:11,color:"#a8c4e8",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}},"Fecha cierre"),
             h('div',{style:{fontWeight:700,color:"#1e40af"}},fd(fechaFin))),
           rec.horaInicio && h('div',{style:{background:"#eff6ff",borderRadius:10,padding:"10px 14px",flex:1}},
-            h('div',{style:{fontSize:11,color:"#93c5fd",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}},"Horario"),
+            h('div',{style:{fontSize:11,color:"#a8c4e8",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}},"Horario"),
             h('div',{style:{fontWeight:700,color:"#1e40af"}},rec.horaInicio+(rec.horaFin?" a "+rec.horaFin:"")))),
         // Comentario/instrucciones del responsable
         comentResp && h('div',{style:{background:"#eff6ff",borderLeft:"4px solid #3b82f6",borderRadius:"0 10px 10px 0",padding:"12px 14px",marginBottom:16}},
@@ -3568,17 +3568,17 @@ function CalificarView({recId, recs, setRecs, loaded}) {
     setDone(true);
   };
 
-  if(!loaded) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:18}},"Cargando...");
+  if(!loaded) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#1a3a6b,#0f2347)",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:18}},"Cargando...");
 
-  if(!rec) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
+  if(!rec) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#1a3a6b,#0f2347)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
     h('div',{style:{background:"white",borderRadius:20,padding:40,maxWidth:420,width:"100%",textAlign:"center"}},
       h('div',{style:{fontSize:48,marginBottom:16}},"🔍"),
       h('p',{style:{color:"#64748b"}},"Solicitud no encontrada.")));
 
-  if(done) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
+  if(done) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#1a3a6b,#0f2347)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
     h('div',{style:{background:"white",borderRadius:20,padding:40,maxWidth:420,width:"100%",textAlign:"center",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}},
       h('div',{style:{fontSize:64,marginBottom:16}},stars>=4?"🎉":"📨"),
-      h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:24,color:"#0f172a",margin:"0 0 12px"}},stars>=4?"¡Gracias por tu calificación!":"Solicitud de reapertura enviada"),
+      h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:24,color:"#1a3a6b",margin:"0 0 12px"}},stars>=4?"¡Gracias por tu calificación!":"Solicitud de reapertura enviada"),
       h('p',{style:{color:"#64748b",fontSize:15,lineHeight:1.6}},stars>=4?"Tu feedback fue registrado. ¡Nos alegra que el problema haya quedado resuelto!":"El equipo revisará tu solicitud y reabrirá la solicitud si corresponde."),
       h('p',{style:{color:"#94a3b8",fontSize:13,marginTop:16}},"Podés cerrar esta ventana.")));
 
@@ -3595,9 +3595,9 @@ function CalificarView({recId, recs, setRecs, loaded}) {
   const msgCat = mensajes[rec.cat]||"nuestro equipo atendió y resolvió el inconveniente";
   const fotos = rec.adjuntosResolucion?.filter(a=>a.url)||[];
 
-  return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",padding:"20px 16px 40px"}},
+  return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#1a3a6b,#0f2347)",padding:"20px 16px 40px"}},
     h('div',{style:{textAlign:"center",marginBottom:24,paddingTop:20}},
-      h('div',{style:{fontSize:11,letterSpacing:3,color:"#93c5fd",textTransform:"uppercase",marginBottom:8}},"Resolución de Solicitud"),
+      h('div',{style:{fontSize:11,letterSpacing:3,color:"#a8c4e8",textTransform:"uppercase",marginBottom:8}},"Resolución de Solicitud"),
       h('h1',{style:{fontFamily:"'Playfair Display',serif",fontSize:26,color:"white",fontWeight:900}},rec.numero),
       h('div',{style:{width:40,height:3,background:"#22c55e",margin:"10px auto 0",borderRadius:2}})),
     h('div',{style:{maxWidth:480,margin:"0 auto"}},
@@ -3605,7 +3605,7 @@ function CalificarView({recId, recs, setRecs, loaded}) {
         // Mensaje cálido principal
         h('div',{style:{textAlign:"center",marginBottom:20,paddingBottom:18,borderBottom:"1.5px solid #f1f5f9"}},
           h('div',{style:{fontSize:40,marginBottom:10}},"✅"),
-          h('div',{style:{fontSize:16,fontWeight:700,color:"#0f172a",marginBottom:6}},"¡Hola "+rec.nombre.split(" ")[0]+"!"),
+          h('div',{style:{fontSize:16,fontWeight:700,color:"#1a3a6b",marginBottom:6}},"¡Hola "+rec.nombre.split(" ")[0]+"!"),
           h('div',{style:{fontSize:14,color:"#475569",lineHeight:1.7}},"Nos alegra informarte que "+msgCat+" en "+rec.sector+".")),
         // Detalle sector/tipo
         h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16,background:"#f8fafc",borderRadius:10,padding:12}},
@@ -3704,13 +3704,13 @@ function SeccionSolicitantes({recs, ChartBox, COLORS, card, sectionTitle}) {
 
     h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:20}},
       h('div',{style:card()},
-        h('div',{style:{fontSize:14,fontWeight:700,color:"#0f172a",marginBottom:16}},"Top 10 por volumen de tickets"),
+        h('div',{style:{fontSize:14,fontWeight:700,color:"#1a3a6b",marginBottom:16}},"Top 10 por volumen de tickets"),
         h(ChartBox,{id:"top-sol",type:"bar",height:220,
           data:{labels:top10.map(s=>s.nombre.split(" ")[0]),
             datasets:[{label:"Tickets",data:top10.map(s=>s.total),backgroundColor:top10.map((_,i)=>COLORS[i%COLORS.length]),borderRadius:4}]},
           options:{indexAxis:"y",scales:{x:{grid:{color:"#f1f5f9"}},y:{grid:{display:false}}},plugins:{legend:{display:false}}}})),
       h('div',{style:card()},
-        h('div',{style:{fontSize:14,fontWeight:700,color:"#0f172a",marginBottom:16}},"Distribución por tipo"),
+        h('div',{style:{fontSize:14,fontWeight:700,color:"#1a3a6b",marginBottom:16}},"Distribución por tipo"),
         h(ChartBox,{id:"dist-tipo",type:"doughnut",height:220,
           data:{labels:["Socio","Empleado","Directivo","Otro"],
             datasets:[{data:[
@@ -3979,8 +3979,8 @@ function DashboardPanel({recs}) {
   // ── ESTILOS ───────────────────────────────────────────────────────────────
   const card = (extra={}) => ({background:"white",borderRadius:16,padding:20,boxShadow:"0 2px 8px rgba(0,0,0,0.06)",border:"1px solid #f1f5f9",...extra});
   const sectionTitle = (txt, sub) => h('div',{style:{marginBottom:20}},
-    h('div',{style:{fontSize:18,fontWeight:800,color:"#0f172a"}}),
-    h('div',{style:{fontSize:18,fontWeight:800,color:"#0f172a"}},txt),
+    h('div',{style:{fontSize:18,fontWeight:800,color:"#1a3a6b"}}),
+    h('div',{style:{fontSize:18,fontWeight:800,color:"#1a3a6b"}},txt),
     sub && h('div',{style:{fontSize:12,color:"#94a3b8",marginTop:2}},sub));
   const kpiCard = (label,value,color,sub) => h('div',{style:{...card(),textAlign:"center",padding:"20px 16px"}},
     h('div',{style:{fontSize:32,fontWeight:900,color}}),
@@ -3994,34 +3994,34 @@ function DashboardPanel({recs}) {
 
   return h('div',{style:{minHeight:"100vh",background:"#f1f5f9",paddingBottom:80}},
     // Header
-    h('div',{style:{background:"linear-gradient(135deg,#0f172a,#1e3a5f)",padding:"24px 28px 20px"}},
-      h('div',{style:{color:"#93c5fd",fontSize:11,letterSpacing:2,textTransform:"uppercase",marginBottom:4}},"Centro Asturiano de Buenos Aires"),
+    h('div',{style:{background:"linear-gradient(135deg,#1a3a6b,#0f2347)",padding:"24px 28px 20px"}},
+      h('div',{style:{color:"#a8c4e8",fontSize:11,letterSpacing:2,textTransform:"uppercase",marginBottom:4}},"Centro Asturiano de Buenos Aires"),
       h('div',{style:{color:"white",fontSize:24,fontWeight:800,marginBottom:16}},"Dashboard de Métricas"),
       // Filtros
       h('div',{style:{display:"flex",gap:10,flexWrap:"wrap"}},
         h('select',{value:filtroArea,onChange:e=>setFiltroArea(e.target.value),
           style:{padding:"8px 12px",borderRadius:8,border:"none",background:"rgba(255,255,255,0.15)",color:"white",fontSize:13,cursor:"pointer"}},
-          h('option',{value:"todas",style:{color:"#0f172a"}},"Todas las áreas"),
-          h('option',{value:"intendencia",style:{color:"#0f172a"}},"Intendencia"),
-          h('option',{value:"administracion",style:{color:"#0f172a"}},"Administración")),
+          h('option',{value:"todas",style:{color:"#1a3a6b"}},"Todas las áreas"),
+          h('option',{value:"intendencia",style:{color:"#1a3a6b"}},"Intendencia"),
+          h('option',{value:"administracion",style:{color:"#1a3a6b"}},"Administración")),
         h('select',{value:filtroPeriodo,onChange:e=>setFiltroPeriodo(e.target.value),
           style:{padding:"8px 12px",borderRadius:8,border:"none",background:"rgba(255,255,255,0.15)",color:"white",fontSize:13,cursor:"pointer"}},
-          h('option',{value:"7",style:{color:"#0f172a"}},"Últimos 7 días"),
-          h('option',{value:"30",style:{color:"#0f172a"}},"Últimos 30 días"),
-          h('option',{value:"90",style:{color:"#0f172a"}},"Últimos 3 meses"),
-          h('option',{value:"180",style:{color:"#0f172a"}},"Últimos 6 meses"),
-          h('option',{value:"365",style:{color:"#0f172a"}},"Último año"),
-          h('option',{value:"all",style:{color:"#0f172a"}},"Todo el historial")),
+          h('option',{value:"7",style:{color:"#1a3a6b"}},"Últimos 7 días"),
+          h('option',{value:"30",style:{color:"#1a3a6b"}},"Últimos 30 días"),
+          h('option',{value:"90",style:{color:"#1a3a6b"}},"Últimos 3 meses"),
+          h('option',{value:"180",style:{color:"#1a3a6b"}},"Últimos 6 meses"),
+          h('option',{value:"365",style:{color:"#1a3a6b"}},"Último año"),
+          h('option',{value:"all",style:{color:"#1a3a6b"}},"Todo el historial")),
         h('select',{value:filtroEjecutor,onChange:e=>setFiltroEjecutor(e.target.value),
           style:{padding:"8px 12px",borderRadius:8,border:"none",background:"rgba(255,255,255,0.15)",color:"white",fontSize:13,cursor:"pointer"}},
-          h('option',{value:"",style:{color:"#0f172a"}},"Todos los ejecutores"),
-          ...ejecutoresUnicos.map(e=>h('option',{key:e.mail,value:e.mail,style:{color:"#0f172a"}},e.nombre))),
+          h('option',{value:"",style:{color:"#1a3a6b"}},"Todos los ejecutores"),
+          ...ejecutoresUnicos.map(e=>h('option',{key:e.mail,value:e.mail,style:{color:"#1a3a6b"}},e.nombre))),
         h('div',{style:{display:"flex",background:"rgba(255,255,255,0.1)",borderRadius:8,padding:2}},
           ...["dia","semana","mes"].map(g=>
             h('button',{key:g,onClick:()=>setGranularidad(g),
               style:{padding:"6px 14px",borderRadius:6,border:"none",cursor:"pointer",fontSize:12,fontWeight:600,
                 background:granularidad===g?"white":"transparent",
-                color:granularidad===g?"#0f172a":"rgba(255,255,255,0.7)",
+                color:granularidad===g?"#1a3a6b":"rgba(255,255,255,0.7)",
                 transition:"all 0.15s"}},
               g==="dia"?"Día":g==="semana"?"Semana":"Mes"))))),
 
@@ -4038,7 +4038,7 @@ function DashboardPanel({recs}) {
       // ── GRUPO 1: VOLUMEN ─────────────────────────────────────────────────
       sectionTitle("Volumen de solicitudes"),
       h('div',{style:{...card(),marginBottom:20}},
-        h('div',{style:{fontSize:14,fontWeight:700,color:"#0f172a",marginBottom:16}},
+        h('div',{style:{fontSize:14,fontWeight:700,color:"#1a3a6b",marginBottom:16}},
           "Tickets por "+(granularidad==="dia"?"día":granularidad==="semana"?"semana":"mes")+" por tipo de solicitante"),
         h(ChartBox,{id:"vol-mes",type:"bar",height:240,
           data:{
@@ -4052,7 +4052,7 @@ function DashboardPanel({recs}) {
 
       h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:20}},
         h('div',{style:card()},
-          h('div',{style:{fontSize:14,fontWeight:700,color:"#0f172a",marginBottom:16}},"Top sectores con más problemas"),
+          h('div',{style:{fontSize:14,fontWeight:700,color:"#1a3a6b",marginBottom:16}},"Top sectores con más problemas"),
           h(ChartBox,{id:"top-sectores",type:"bar",height:220,
             data:{
               labels:topSectores.map(([s])=>s.length>20?s.slice(0,18)+"...":s),
@@ -4060,7 +4060,7 @@ function DashboardPanel({recs}) {
                 backgroundColor:topSectores.map((_,i)=>COLORS[i%COLORS.length]),borderRadius:4}]},
             options:{indexAxis:"y",scales:{x:{grid:{color:"#f1f5f9"}},y:{grid:{display:false}}},plugins:{legend:{display:false}}}})),
         h('div',{style:card()},
-          h('div',{style:{fontSize:14,fontWeight:700,color:"#0f172a",marginBottom:16}},"Distribución por estado actual"),
+          h('div',{style:{fontSize:14,fontWeight:700,color:"#1a3a6b",marginBottom:16}},"Distribución por estado actual"),
           h(ChartBox,{id:"dist-estados",type:"doughnut",height:220,
             data:{
               labels:["Bajo análisis","En proceso","Completada","Esp. validación","Sin resolución"],
@@ -4070,7 +4070,7 @@ function DashboardPanel({recs}) {
 
       // Top mails solicitantes
       h('div',{style:{...card(),marginBottom:28}},
-        h('div',{style:{fontSize:14,fontWeight:700,color:"#0f172a",marginBottom:14}},"Top solicitantes por volumen de tickets"),
+        h('div',{style:{fontSize:14,fontWeight:700,color:"#1a3a6b",marginBottom:14}},"Top solicitantes por volumen de tickets"),
         h('div',{style:{overflowX:"auto"}},
           h('table',{style:{width:"100%",borderCollapse:"collapse",fontSize:13}},
             h('thead',null,h('tr',null,
@@ -4092,7 +4092,7 @@ function DashboardPanel({recs}) {
       sectionTitle("Velocidad de resolución"),
       h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:28}},
         h('div',{style:card()},
-          h('div',{style:{fontSize:14,fontWeight:700,color:"#0f172a",marginBottom:16}},"Tiempo promedio de resolución (días)"),
+          h('div',{style:{fontSize:14,fontWeight:700,color:"#1a3a6b",marginBottom:16}},"Tiempo promedio de resolución (días)"),
           h(ChartBox,{id:"tiempo-area",type:"bar",height:220,
             data:{
               labels:tiempoPromPorArea.map(x=>x.label),
@@ -4100,7 +4100,7 @@ function DashboardPanel({recs}) {
                 backgroundColor:tiempoPromPorArea.map((_,i)=>COLORS[i%COLORS.length]),borderRadius:6}]},
             options:{scales:{x:{grid:{display:false}},y:{grid:{color:"#f1f5f9"}}},plugins:{legend:{display:false}}}})),
         h('div',{style:card()},
-          h('div',{style:{fontSize:14,fontWeight:700,color:"#0f172a",marginBottom:16}},"Cumplimiento de plazos"),
+          h('div',{style:{fontSize:14,fontWeight:700,color:"#1a3a6b",marginBottom:16}},"Cumplimiento de plazos"),
           h(ChartBox,{id:"plazo",type:"doughnut",height:220,
             data:{
               labels:["Dentro del plazo","Fuera de plazo"],
@@ -4112,7 +4112,7 @@ function DashboardPanel({recs}) {
       sectionTitle("Calidad de resolución"),
       h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:20}},
         h('div',{style:card()},
-          h('div',{style:{fontSize:14,fontWeight:700,color:"#0f172a",marginBottom:16}},"Calificación promedio por área (1-5)"),
+          h('div',{style:{fontSize:14,fontWeight:700,color:"#1a3a6b",marginBottom:16}},"Calificación promedio por área (1-5)"),
           califPorArea.length === 0
             ? h('div',{style:{textAlign:"center",padding:40,color:"#94a3b8",fontSize:13}},"Sin calificaciones en el período")
             : h(ChartBox,{id:"calif-area",type:"bar",height:220,
@@ -4122,7 +4122,7 @@ function DashboardPanel({recs}) {
                     backgroundColor:califPorArea.map(x=>x.avg>=4?"#22c55e":x.avg>=3?"#eab308":"#ef4444"),borderRadius:6}]},
                 options:{scales:{x:{grid:{display:false}},y:{min:0,max:5,grid:{color:"#f1f5f9"}}},plugins:{legend:{display:false}}}})),
         h('div',{style:card()},
-          h('div',{style:{fontSize:14,fontWeight:700,color:"#0f172a",marginBottom:16}},"Tasa de calificación por área"),
+          h('div',{style:{fontSize:14,fontWeight:700,color:"#1a3a6b",marginBottom:16}},"Tasa de calificación por área"),
           califTasaPorArea.length === 0
             ? h('div',{style:{textAlign:"center",padding:40,color:"#94a3b8",fontSize:13}},"Sin datos en el período")
             : h(ChartBox,{id:"tasa-calif",type:"bar",height:220,
@@ -4136,7 +4136,7 @@ function DashboardPanel({recs}) {
 
       // Correlación resoluciones vs calificaciones
       h('div',{style:{...card(),marginBottom:28}},
-        h('div',{style:{fontSize:14,fontWeight:700,color:"#0f172a",marginBottom:4}},"Resoluciones completadas vs calificación promedio"),
+        h('div',{style:{fontSize:14,fontWeight:700,color:"#1a3a6b",marginBottom:4}},"Resoluciones completadas vs calificación promedio"),
         h('div',{style:{fontSize:12,color:"#94a3b8",marginBottom:16}},"Compara volumen completado con satisfacción — ideal: alto volumen + alta calificación"),
         califPorArea.length === 0
           ? h('div',{style:{textAlign:"center",padding:40,color:"#94a3b8",fontSize:13}},"Sin calificaciones en el período")
@@ -4160,7 +4160,7 @@ function DashboardPanel({recs}) {
       sectionTitle("Performance del equipo"),
       h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:20}},
         h('div',{style:card()},
-          h('div',{style:{fontSize:14,fontWeight:700,color:"#0f172a",marginBottom:14}},"Ranking de ejecutores"),
+          h('div',{style:{fontSize:14,fontWeight:700,color:"#1a3a6b",marginBottom:14}},"Ranking de ejecutores"),
           rankingEjecutores.length === 0
             ? h('div',{style:{textAlign:"center",padding:40,color:"#94a3b8",fontSize:13}},"Sin datos")
             : h('table',{style:{width:"100%",borderCollapse:"collapse",fontSize:12}},
@@ -4176,7 +4176,7 @@ function DashboardPanel({recs}) {
                       e.calificacion ? "★ "+e.calificacion : "—"),
                     h('td',{style:{padding:"8px 10px",textAlign:"center",color:e.rechazos>0?"#ef4444":"#22c55e",fontWeight:600}},e.rechazos)))  ))),
         h('div',{style:card()},
-          h('div',{style:{fontSize:14,fontWeight:700,color:"#0f172a",marginBottom:14}},"Ranking de responsables"),
+          h('div',{style:{fontSize:14,fontWeight:700,color:"#1a3a6b",marginBottom:14}},"Ranking de responsables"),
           rankingResponsables.length === 0
             ? h('div',{style:{textAlign:"center",padding:40,color:"#94a3b8",fontSize:13}},"Sin datos")
             : h('table',{style:{width:"100%",borderCollapse:"collapse",fontSize:12}},
@@ -4457,7 +4457,7 @@ function App() {
     setView("rechazar_ok");
   };
 
-  if(!loaded) return h('div',{style:{minHeight:"100vh",background:"#0f172a",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:18}},"Cargando...");
+  if(!loaded) return h('div',{style:{minHeight:"100vh",background:"#1a3a6b",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:18}},"Cargando...");
 
   if(view==="confirm_ok") {
     const confirmedRec = recs.find(r=>String(r.id)===String(ls.get("lastConfirmedId")));
@@ -4484,10 +4484,10 @@ function App() {
         esReprogramacion: !!(confirmedRec.fechaInicioActualizada || confirmedRec.fechaCierreActualizada),
       };
     })() : null;
-    return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
+    return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#1a3a6b,#0f2347)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
     h('div',{style:{background:"white",borderRadius:20,padding:40,maxWidth:460,width:"100%",textAlign:"center",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}},
       h('div',{style:{fontSize:64,marginBottom:16}},"✅"),
-      h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:26,color:"#0f172a",margin:"0 0 12px"}},"¡Tarea confirmada!"),
+      h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:26,color:"#1a3a6b",margin:"0 0 12px"}},"¡Tarea confirmada!"),
       h('p',{style:{color:"#64748b",fontSize:15,lineHeight:1.6}},"Confirmaste que asumís la responsabilidad. El responsable fue notificado."),
       _calLinks && _calLinks.esReprogramacion && h('div',{style:{background:"#fff7ed",border:"1.5px solid #fed7aa",borderRadius:10,padding:"10px 14px",margin:"16px 0",fontSize:13,color:"#92400e",textAlign:"left"}},
         "⚠️ Esta tarea fue reprogramada. Si ya tenías el evento anterior en tu calendario, eliminalo antes de agregar el nuevo."),
@@ -4498,17 +4498,17 @@ function App() {
       h('p',{style:{color:"#94a3b8",fontSize:12,marginTop:16}},"Podés cerrar esta ventana cuando termines.")));
   }
 
-  if(view==="rechazar_ok") return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
+  if(view==="rechazar_ok") return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#1a3a6b,#0f2347)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
     h('div',{style:{background:"white",borderRadius:20,padding:40,maxWidth:420,width:"100%",textAlign:"center",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}},
       h('div',{style:{fontSize:64,marginBottom:16}},"📨"),
-      h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:26,color:"#0f172a",margin:"0 0 12px"}},"Rechazo registrado"),
+      h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:26,color:"#1a3a6b",margin:"0 0 12px"}},"Rechazo registrado"),
       h('p',{style:{color:"#64748b",fontSize:15,lineHeight:1.6}},"Tu respuesta fue registrada. El responsable fue notificado y reasignará la tarea."),
       h('p',{style:{color:"#94a3b8",fontSize:13,marginTop:16}},"Podés cerrar esta ventana.")));
 
-  if(view==="validar_ok") return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
+  if(view==="validar_ok") return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#1a3a6b,#0f2347)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
     h('div',{style:{background:"white",borderRadius:20,padding:40,maxWidth:420,width:"100%",textAlign:"center"}},
       h('div',{style:{fontSize:64,marginBottom:16}},"✅"),
-      h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:24,color:"#0f172a",margin:"0 0 12px"}},"Resolución validada"),
+      h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:24,color:"#1a3a6b",margin:"0 0 12px"}},"Resolución validada"),
       h('p',{style:{color:"#64748b",fontSize:15,lineHeight:1.6}},"La resolución fue aprobada. El usuario recibirá el email para calificar la atención."),
       h('p',{style:{color:"#94a3b8",fontSize:13,marginTop:16}},"Podés cerrar esta ventana.")));
   if(view && view.startsWith("calendar_result_")) {
@@ -4519,10 +4519,10 @@ function App() {
     const ejLista = r?.ejecutores_lista||[];
     const ejMatch = ejLista.find(e=>e.mail===cMail);
     const hasConfirmed = ejMatch ? ejMatch.confirmado : r?.ejecutorConfirmado;
-    return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
+    return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#1a3a6b,#0f2347)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
       h('div',{style:{background:"white",borderRadius:20,padding:40,maxWidth:440,width:"100%",textAlign:"center"}},
         h('div',{style:{fontSize:64,marginBottom:16}},hasConfirmed?"📅":"⚠️"),
-        h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:24,color:"#0f172a",margin:"0 0 12px"}},
+        h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:24,color:"#1a3a6b",margin:"0 0 12px"}},
           hasConfirmed?"Eventos descargados":"Primero debés confirmar"),
         h('p',{style:{color:"#64748b",fontSize:15,lineHeight:1.6}},
           hasConfirmed
@@ -4542,24 +4542,24 @@ function App() {
   if(view && view.startsWith("seguimiento_")) {
     const numSeg = view.replace("seguimiento_","");
     // Still loading from Supabase
-    if(!loaded) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center"}},
+    if(!loaded) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#1a3a6b,#0f2347)",display:"flex",alignItems:"center",justifyContent:"center"}},
       h('div',{style:{textAlign:"center",color:"white"}},
         h('div',{style:{fontSize:40,marginBottom:16}},"🔍"),
         h('div',{style:{fontSize:18}},"Buscando tu solicitud...")));
     // Always get fresh data from Supabase for this specific reclamo
     const rec = recs.find(r=>r.numero===numSeg);
-    if(!rec) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
+    if(!rec) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#1a3a6b,#0f2347)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
       h('div',{style:{background:"white",borderRadius:20,padding:40,maxWidth:420,width:"100%",textAlign:"center"}},
         h('div',{style:{fontSize:48,marginBottom:16}},"🔍"),
         h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:22,margin:"0 0 12px"}},"Solicitud no encontrada"),
         h('p',{style:{color:"#64748b",fontSize:14}},"No encontramos la solicitud "+numSeg+". Verificá el número e intentá de nuevo."),
-        h('button',{onClick:()=>setView("admin"),style:{marginTop:20,padding:"10px 24px",background:"#0f172a",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:600}},"Consultar otra solicitud")));
+        h('button',{onClick:()=>setView("admin"),style:{marginTop:20,padding:"10px 24px",background:"#1a3a6b",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:600}},"Consultar otra solicitud")));
     const cat=CATS[rec.cat]; const pri=PRIS.find(p=>p.id===rec.pri);
     const est=ESTADOS.find(e=>e.id===rec.estadoAvance);
     const appUrl=window.location.href.split("?")[0];
-    return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",padding:"20px 16px 40px"}},
+    return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#1a3a6b,#0f2347)",padding:"20px 16px 40px"}},
       h('div',{style:{textAlign:"center",marginBottom:24,paddingTop:20}},
-        h('div',{style:{fontSize:11,letterSpacing:3,color:"#93c5fd",textTransform:"uppercase",marginBottom:8}},"Seguimiento de Solicitud"),
+        h('div',{style:{fontSize:11,letterSpacing:3,color:"#a8c4e8",textTransform:"uppercase",marginBottom:8}},"Seguimiento de Solicitud"),
         h('h1',{style:{fontFamily:"'Playfair Display',serif",fontSize:26,color:"white",fontWeight:900}},rec.numero),
         h('div',{style:{width:40,height:3,background:"#3b82f6",margin:"10px auto 0",borderRadius:2}})),
       h('div',{style:{maxWidth:500,margin:"0 auto"}},
@@ -4578,7 +4578,7 @@ function App() {
             h('div',null,
               h('div',{style:{fontSize:11,color:"#94a3b8",fontWeight:600,marginBottom:3,textTransform:"uppercase"}},"Fecha tentativa de resolución"),
               rec.fechaCierreConfirmada
-                ? h('div',{style:{fontSize:14,fontWeight:600,color:"#0f172a"}},fd(rec.fechaCierreConfirmada))
+                ? h('div',{style:{fontSize:14,fontWeight:600,color:"#1a3a6b"}},fd(rec.fechaCierreConfirmada))
                 : h('div',{style:{fontSize:13,color:"#94a3b8",fontStyle:"italic"}},"A definir por intendencia"))),
           h('div',{style:{marginBottom:16}},
             h('div',{style:{fontSize:11,color:"#94a3b8",fontWeight:600,marginBottom:4,textTransform:"uppercase"}},"Descripción"),
@@ -4610,7 +4610,7 @@ function App() {
             h('a',{href:appUrl+"?calificar="+rec.id,style:{display:"inline-block",padding:"8px 20px",background:"#f97316",color:"white",borderRadius:8,fontSize:13,fontWeight:600,textDecoration:"none"}},"⭐ Calificar resolución")))));
   }
 
-  const navBtn = (v, label, active) => h('button',{onClick:()=>setView(v),style:{padding:"8px 16px",borderRadius:20,border:"none",background:active?"#0f172a":"rgba(255,255,255,0.9)",color:active?"white":"#374151",cursor:"pointer",fontSize:13,fontWeight:600,boxShadow:"0 2px 12px rgba(0,0,0,0.2)"}},label);
+  const navBtn = (v, label, active) => h('button',{onClick:()=>setView(v),style:{padding:"8px 16px",borderRadius:20,border:"none",background:active?"#1a3a6b":"rgba(255,255,255,0.9)",color:active?"white":"#374151",cursor:"pointer",fontSize:13,fontWeight:600,boxShadow:"0 2px 12px rgba(0,0,0,0.2)"}},label);
 
   const recsFiltrados = (area) => recs.filter(r => area==="intendencia"
     ? CATS_INTENDENCIA.includes(r.cat)
@@ -4642,6 +4642,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
+
 
 
 
