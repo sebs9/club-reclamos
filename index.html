@@ -224,6 +224,12 @@ const SUPABASE_URL   = "https://pltfqosqinzufvjpiddr.supabase.co";
 const SUPABASE_KEY   = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBsdGZxb3NxaW56dWZ2anBpZGRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1MjA4NDksImV4cCI6MjA5MTA5Njg0OX0.d-EMCtfVqi6LvtbEdTBvH_ZaXiFJD6oXukPvMpbobXQ";
 const SCRIPT_URL     = "https://script.google.com/macros/s/AKfycbzZh2AxTboR13rjJeUdXSdO7jjUPkZcIPoeWFYUZynkyWkP6LjNbqQxVxpPIvT26Kh6/exec";
 
+// Genera link al panel con deep-link al área correcta
+function panelUrl(appUrl, area) {
+  const a = area || "intendencia";
+  return appUrl + "?panel=" + a;
+}
+
 const SECTORES_ADMIN = ["Administración"];
 const SECTORES_TODOS = [
   "Cabina Control Entrada Campo","Covadonga Hall De Entrada","Cancha Playón Entrada Covadonga",
@@ -1064,6 +1070,9 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs}) {
             <div style="padding:10px 14px;background:#f0fdf4;border-radius:8px;font-size:12px;color:#15803d">
               &#10003; Cuando completes la tarea: <a href="${appUrl}?completar=${rec.id}" style="color:#15803d;font-weight:700">Marcar como completada</a>
             </div>
+            <div style="margin-top:10px;text-align:center">
+              <a href="${panelUrl(appUrl, isAdminCat(rec.cat)?'administracion':'intendencia')}" style="display:inline-block;padding:8px 18px;background:#1a3a6b;color:white;text-decoration:none;border-radius:8px;font-size:12px;font-weight:600">Ir al Panel de Gestión</a>
+            </div>
           </div>
           <div style="text-align:center;color:#94a3b8;font-size:11px;margin-top:12px">Asturiano — Sistema de Reclamos</div>
         </div>`;
@@ -1273,6 +1282,9 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs}) {
             ${htmlAdjEj}
             <div style="text-align:center;margin-top:20px">
               <a href="${verUrl}" style="display:inline-block;padding:14px 32px;background:#2563eb;color:white;text-decoration:none;border-radius:10px;font-weight:700;font-size:15px">Revisa si estas conforme con la resolucion</a>
+            </div>
+            <div style="text-align:center;margin-top:10px">
+              <a href="${panelUrl(appUrl2, isAdminCat(savedRec.cat)?'administracion':'intendencia')}" style="display:inline-block;padding:8px 18px;background:#1a3a6b;color:white;text-decoration:none;border-radius:8px;font-size:12px;font-weight:600">Ir al Panel de Gestión</a>
             </div>
             <p style="color:#94a3b8;font-size:12px;text-align:center;margin-top:16px">Si no respondés en 2 dias, el cliente sera notificado automaticamente.</p>
           </div>
@@ -2096,7 +2108,10 @@ async function sbDeleteRecurrencia(id) {
 
 const RECURRENCIA_EMPTY = {
   nombre:"", cat:"", sector:"", sub:"", criticidad:"media",
-  ejecutorMail:"", ejecutorNombre:"", comentario:"",
+  tipoEjecutor:"interno", // "interno" | "tercero"
+  ejecutorMail:"", ejecutorNombre:"",
+  empresaNombre:"", empresaTelefono:"",
+  comentario:"",
   patron:"semanal", // "diario"|"semanal"|"quincenal"|"mensual"|"personalizado"
   intervaloDias:7, diasSemana:[], diaMes:1,
   fechaInicio:"", leadTimeDias:2,
@@ -2363,7 +2378,10 @@ function RecurrenciasTab({area, ejecutores, recs}) {
 }
 
 function RecurrenciaModal({rec: recInit, onSave, onClose, ejecutores, cats}) {
-  const [f, setF] = useState(recInit);
+  const [f, setF] = useState({
+    tipoEjecutor:"interno", empresaNombre:"", empresaTelefono:"",
+    ...recInit
+  });
   const [saving, setSaving] = useState(false);
   const set = (k,v) => setF(p=>({...p,[k]:v}));
   const DIAS_SEMANA = ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"];
@@ -2429,15 +2447,35 @@ function RecurrenciaModal({rec: recInit, onSave, onClose, ejecutores, cats}) {
               h('option',{value:"media"},"Media"),
               h('option',{value:"baja"},"Baja")))),
 
-        // Ejecutor
+        // Ejecutor — toggle interno / tercero
         h('div',{style:sectionStyle},
-          h('label',{style:labelStyle},"Ejecutor (opcional)"),
-          h('select',{value:f.ejecutorMail,onChange:e=>{
-            const ej=ejecutores.find(x=>x.mail===e.target.value);
-            setF(p=>({...p,ejecutorMail:e.target.value,ejecutorNombre:(ej&&ej.nombre)||""}));
-          },style:inputStyle},
-            h('option',{value:""},"Sin ejecutor asignado"),
-            ...(ejecutores||[]).map(e=>h('option',{key:e.mail,value:e.mail},e.nombre||e.mail)))),
+          h('label',{style:labelStyle},"Ejecutor responsable (opcional)"),
+          h('div',{style:{display:"flex",gap:8,marginBottom:10}},
+            ...[["interno","👷 Empleado del club"],["tercero","🏢 Proveedor externo"]].map(([tipo,lbl])=>
+              h('button',{key:tipo,onClick:()=>{
+                set("tipoEjecutor",tipo);
+                if(tipo==="tercero"){set("ejecutorMail","tercero@externo");set("ejecutorNombre",f.empresaNombre||"");}
+                else{set("ejecutorMail","");set("ejecutorNombre","");set("empresaNombre","");set("empresaTelefono","");}
+              },style:{flex:1,padding:"7px",borderRadius:8,border:f.tipoEjecutor===tipo?"2px solid #3b82f6":"2px solid #e2e8f0",
+                background:f.tipoEjecutor===tipo?"#eff6ff":"white",
+                color:f.tipoEjecutor===tipo?"#1d4ed8":"#64748b",cursor:"pointer",fontSize:12,fontWeight:600}},lbl))),
+          f.tipoEjecutor!=="tercero"
+            ? h('select',{value:f.ejecutorMail,onChange:e=>{
+                const ej=ejecutores.find(x=>x.mail===e.target.value);
+                setF(p=>({...p,ejecutorMail:e.target.value,ejecutorNombre:(ej&&ej.nombre)||""}));
+              },style:inputStyle},
+                h('option',{value:""},"Sin ejecutor asignado"),
+                ...(ejecutores||[]).map(e=>h('option',{key:e.mail,value:e.mail},e.nombre||e.mail)))
+            : h('div',{style:{display:"flex",flexDirection:"column",gap:8}},
+                h('input',{value:f.empresaNombre||"",onChange:e=>{
+                  set("empresaNombre",e.target.value);
+                  set("ejecutorNombre",e.target.value);
+                  set("ejecutorMail","tercero@externo");
+                },placeholder:"Nombre empresa / proveedor *",style:inputStyle}),
+                h('input',{value:f.empresaTelefono||"",onChange:e=>set("empresaTelefono",e.target.value),
+                  placeholder:"Teléfono / contacto (opcional)",style:inputStyle}),
+                f.empresaNombre && h('div',{style:{fontSize:11,color:"#16a34a",fontWeight:600,marginTop:2}},
+                  "✓ Proveedor: "+f.empresaNombre))),
 
         // Instrucciones
         h('div',{style:sectionStyle},
@@ -2799,7 +2837,7 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
           const dest=[...dirMails,...respMails].filter(Boolean);
           if(dest.length){ await sendEmail({to:dest, subject:`[Asturiano]  Solicitud sin asignar — ${r.numero}`, body:`La solicitud ${r.numero} lleva ${formatTiempoJS(diasCreado)} sin ejecutor ni fechas.\n\nSector: ${r.sector}\nDescripción: ${r.desc}\nCriticidad: ${crit}\n\n${appUrl}`}); enviados++; }
         } else if (diasCreado >= plazos.recordatorio) {
-          if(respMails.length){ await sendEmail({to:respMails, subject:`[Asturiano]  Solicitud pendiente de asignación — ${r.numero}`, body:`La solicitud ${r.numero} no tiene ejecutor ni fechas asignadas.\n\nSector: ${r.sector}\nDescripción: ${r.desc}\n\nIngresá al panel:\n${appUrl}`}); enviados++; }
+          if(respMails.length){ await sendEmail({to:respMails, subject:`[Asturiano]  Solicitud pendiente de asignación — ${r.numero}`, body:`La solicitud ${r.numero} no tiene ejecutor ni fechas asignadas.\n\nSector: ${r.sector}\nDescripción: ${r.desc}\n\nIngresá al panel:\n${panelUrl(appUrl, isAdminCat(r.cat)?"administracion":"intendencia")}`}); enviados++; }
         }
         continue;
       }
@@ -3237,6 +3275,9 @@ function CompletarView({recId, recs, setRecs, loaded}) {
           ${htmlAdjEj2}
           <div style="text-align:center;margin-top:24px">
             <a href="${verUrl2}" style="display:inline-block;padding:14px 32px;background:#2563eb;color:white;text-decoration:none;border-radius:10px;font-weight:700;font-size:15px">Revisa si estas conforme con la resolucion</a>
+          </div>
+          <div style="text-align:center;margin-top:10px">
+            <a href="${panelUrl(appUrl, isAdminCat(rec.cat)?'administracion':'intendencia')}" style="display:inline-block;padding:8px 18px;background:#1a3a6b;color:white;text-decoration:none;border-radius:8px;font-size:12px;font-weight:600">Ir al Panel de Gestión</a>
           </div>
           <p style="color:#94a3b8;font-size:12px;text-align:center;margin-top:16px">Si no respondés en 2 dias, el cliente sera notificado automaticamente.</p>
         </div>
@@ -4258,6 +4299,7 @@ function App() {
   const _valParam   = _params.get("validar");
   const _rechValParam = _params.get("rechazar_validacion");
   const _verParam   = _params.get("ver");
+  const _panelParam = _params.get("panel"); // deep link desde mails
   const _initView  = _segParam  ? "seguimiento_"+_segParam
     : _valParam   ? "validar_detalle_"+_valParam
     : _rechValParam ? "rechazar_val_"+_rechValParam
@@ -4267,6 +4309,8 @@ function App() {
     : _params.get("confirmar") ? "loading"
     : _params.get("rechazar")  ? "loading"
     : _params.get("reabrir")   ? "loading"
+    : _panelParam === "intendencia" ? "intendencia"
+    : _panelParam === "administracion" ? "administracion"
     : "socio";
 
   const [view,setView]           = useState(_initView);
@@ -4274,7 +4318,7 @@ function App() {
   const [ejecutores,setEjecutores] = useState([]);
   const [loaded,setLoaded]       = useState(false);
   const [showPanelTabs, setShowPanelTabs] = useState(()=>
-    sessionStorage.getItem('authInt')==='1' || sessionStorage.getItem('authAdm')==='1' || sessionStorage.getItem('authDash')==='1'
+    sessionStorage.getItem('authInt')==='1' || sessionStorage.getItem('authAdm')==='1' || sessionStorage.getItem('authDash')==='1' || !!_panelParam
   );
   const [authInt, setAuthInt]    = useState(()=>sessionStorage.getItem('authInt')==='1');
   const [authAdm, setAuthAdm]    = useState(()=>sessionStorage.getItem('authAdm')==='1');
@@ -4693,6 +4737,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
+
 
 
 
