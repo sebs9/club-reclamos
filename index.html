@@ -910,6 +910,60 @@ function PantallaRechazo({onConfirm}) {
 }
 
 // ── MODAL GESTIÓN ──────────────────────────────────────────────────────────
+// ── PLANILLA PRESUPUESTO ─────────────────────────────────────────────────────
+function PlanillaPresupuesto(props) {
+  var value = props.value; var onChange = props.onChange;
+  var DEFAULT_DATA = {meses:["Mes 1"],filas:[{concepto:"Concepto 1",valores:["0"]}]};
+  function parse(v) {
+    if(!v) return DEFAULT_DATA;
+    try { var d=JSON.parse(v); if(d&&Array.isArray(d.meses)&&Array.isArray(d.filas)) return d; } catch(e){}
+    return DEFAULT_DATA;
+  }
+  var s = useState(parse(value)); var data=s[0]; var setData=s[1];
+  function upd(nd){ setData(nd); onChange(JSON.stringify(nd)); }
+  function setMes(mi,v){ var m=data.meses.slice(); m[mi]=v; upd(Object.assign({},data,{meses:m})); }
+  function setConc(fi,v){ upd(Object.assign({},data,{filas:data.filas.map(function(r,i){return i===fi?Object.assign({},r,{concepto:v}):r;})})); }
+  function setVal(fi,mi,v){ upd(Object.assign({},data,{filas:data.filas.map(function(r,i){ if(i!==fi)return r; var vals=r.valores.slice(); vals[mi]=v; return Object.assign({},r,{valores:vals}); })})); }
+  function addMes(){ upd(Object.assign({},data,{meses:data.meses.concat(["Mes "+(data.meses.length+1)]),filas:data.filas.map(function(r){return Object.assign({},r,{valores:r.valores.concat(["0"])});})})); }
+  function rmMes(mi){ if(data.meses.length<=1)return; upd(Object.assign({},data,{meses:data.meses.filter(function(_,i){return i!==mi;}),filas:data.filas.map(function(r){return Object.assign({},r,{valores:r.valores.filter(function(_,i){return i!==mi;})});})})); }
+  function addFila(){ upd(Object.assign({},data,{filas:data.filas.concat([{concepto:"Concepto "+(data.filas.length+1),valores:data.meses.map(function(){return "0";})}])})); }
+  function rmFila(fi){ if(data.filas.length<=1)return; upd(Object.assign({},data,{filas:data.filas.filter(function(_,i){return i!==fi;})})); }
+  var totMes=data.meses.map(function(_,mi){return data.filas.reduce(function(s,r){return s+Number(r.valores[mi]||0);},0);});
+  var totGen=totMes.reduce(function(s,v){return s+v;},0);
+  function fmt(n){return n>0?"$"+Number(n).toLocaleString("es-AR"):"—";}
+  var cS={padding:"5px 6px",borderRadius:6,border:"1.5px solid #e2e8f0",fontSize:12,textAlign:"right",width:"100%",outline:"none",boxSizing:"border-box"};
+  var hS={padding:"5px 6px",borderRadius:6,border:"1.5px solid #c7d2fe",fontSize:11,fontWeight:600,width:"100%",outline:"none",background:"#eef2ff",textAlign:"center",boxSizing:"border-box"};
+  return h('div',{style:{border:"1.5px solid #e2e8f0",borderRadius:10,overflow:"hidden",fontSize:12}},
+    h('div',{style:{overflowX:"auto"}},
+      h('table',{style:{width:"100%",borderCollapse:"collapse",minWidth:280}},
+        h('thead',null,h('tr',{style:{background:"#1a3a6b"}},
+          h('th',{style:{padding:"8px 10px",color:"white",textAlign:"left",fontSize:11,fontWeight:600,minWidth:110}},"Concepto"),
+          data.meses.map(function(m,mi){return h('th',{key:mi,style:{padding:"4px",minWidth:88}},
+            h('div',{style:{display:"flex",alignItems:"center",gap:2}},
+              h('input',{value:m,onChange:function(e){setMes(mi,e.target.value);},style:hS}),
+              data.meses.length>1&&h('button',{onClick:function(){rmMes(mi);},style:{background:"none",border:"none",color:"#a5b4fc",cursor:"pointer",fontSize:15,padding:"0 2px"}},"×")));
+          }),
+          h('th',{style:{padding:"8px 6px",color:"#93c5fd",fontSize:11,fontWeight:600,textAlign:"right",whiteSpace:"nowrap"}},"Total"))),
+        h('tbody',null,
+          data.filas.map(function(fila,fi){return h('tr',{key:fi,style:{background:fi%2===0?"#f8fafc":"white"}},
+            h('td',{style:{padding:"4px 6px"}},h('div',{style:{display:"flex",alignItems:"center",gap:4}},
+              h('input',{value:fila.concepto,onChange:function(e){setConc(fi,e.target.value);},style:Object.assign({},cS,{textAlign:"left",flex:1})}),
+              data.filas.length>1&&h('button',{onClick:function(){rmFila(fi);},style:{background:"none",border:"none",color:"#ef4444",cursor:"pointer",fontSize:15,padding:"0 2px",flexShrink:0}},"×"))),
+            data.meses.map(function(_,mi){return h('td',{key:mi,style:{padding:"4px"}},
+              h('input',{type:"number",value:fila.valores[mi]||"0",onChange:function(e){setVal(fi,mi,e.target.value);},style:Object.assign({},cS,{minWidth:70})}));}),
+            h('td',{style:{padding:"4px 8px",textAlign:"right",fontWeight:600,color:"#1a3a6b",whiteSpace:"nowrap"}},
+              fmt(data.meses.reduce(function(s,_,mi){return s+Number(fila.valores[mi]||0);},0))));
+          }),
+          h('tr',{style:{background:"#eff6ff",borderTop:"2px solid #bfdbfe"}},
+            h('td',{style:{padding:"7px 10px",fontWeight:700,color:"#1d4ed8",fontSize:12}},"TOTAL"),
+            totMes.map(function(t,mi){return h('td',{key:mi,style:{padding:"7px 4px",textAlign:"right",fontWeight:700,color:"#1d4ed8",fontSize:12}},fmt(t));}),
+            h('td',{style:{padding:"7px 8px",textAlign:"right",fontWeight:800,color:"#1d4ed8",fontSize:13}},fmt(totGen)))))),
+    h('div',{style:{display:"flex",gap:8,padding:"8px 10px",borderTop:"1.5px solid #e2e8f0",background:"#f8fafc",alignItems:"center"}},
+      h('button',{onClick:addFila,style:{padding:"5px 12px",background:"#eff6ff",border:"1.5px solid #bfdbfe",borderRadius:6,cursor:"pointer",fontSize:12,color:"#1d4ed8",fontWeight:600}},"+ Fila"),
+      h('button',{onClick:addMes,style:{padding:"5px 12px",background:"#eff6ff",border:"1.5px solid #bfdbfe",borderRadius:6,cursor:"pointer",fontSize:12,color:"#1d4ed8",fontWeight:600}},"+ Mes"),
+      totGen>0&&h('span',{style:{marginLeft:"auto",fontWeight:700,color:"#15803d",fontSize:13}},"Total: "+fmt(totGen))));
+}
+
 function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs}) {
   const [tab,setTab] = useState("gestion");
   const yaFueAsignado = !!(rec.ejecutorMailOriginal || rec.fechaInicioOriginal);
@@ -1456,8 +1510,13 @@ Resolución: ${descripcion||"—"}`});
                 h('input',{type:"time",value:f.horaInicio||"",onChange:e=>set("horaInicio",e.target.value),style:aS()})),
               h('div',null,h('label',{style:{display:"block",fontSize:10,fontWeight:600,color:"#374151",marginBottom:4,textTransform:"uppercase"}},"Hora fin"),
                 h('input',{type:"time",value:f.horaFin||"",onChange:e=>set("horaFin",e.target.value),style:aS()})))),
-          h('div',{style:{marginBottom:14}},h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Presupuesto ($)"),h('input',{value:f.presupuesto,onChange:e=>set("presupuesto",e.target.value),placeholder:"0",type:"number",style:aS()})),
-          h('div',{style:{marginBottom:14}},h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Detalle del presupuesto"),h('textarea',{value:f.presupuestoDetalle,onChange:e=>set("presupuestoDetalle",e.target.value),rows:2,placeholder:"Conceptos...",style:{...aS(),resize:"vertical"}}))),
+          h('div',{style:{marginBottom:14}},
+            h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:8,textTransform:"uppercase",letterSpacing:0.5}},"💰 Planilla de Presupuesto"),
+            h(PlanillaPresupuesto,{value:f.presupuestoDetalle,onChange:v=>{
+              set("presupuestoDetalle",v);
+              // Calcular total y guardarlo en presupuesto
+              try{const d=JSON.parse(v);const tot=d.filas.reduce((s,r)=>s+d.meses.reduce((ss,_,mi)=>ss+Number(r.valores[mi]||0),0),0);set("presupuesto",tot||"");}catch(e){}
+            }})),
 
         // TAB ASIGNACIÓN
         tab==="asignacion" && h('div',null,
@@ -1603,7 +1662,7 @@ Resolución: ${descripcion||"—"}`});
         saveErr && h('div',{style:{background:"#fef2f2",border:"1.5px solid #fecaca",borderRadius:8,padding:"10px 14px",marginBottom:10,fontSize:13,color:"#dc2626"}},saveErr),
         h('div',{style:{display:"flex",gap:10,marginTop:4}},
           h('button',{onClick:onClose,style:{flex:1,padding:"12px",background:"#f1f5f9",color:"#64748b",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:600}},"Cancelar"),
-          h('button',{onClick:save,disabled:sending,style:{flex:2,padding:"12px",background:sending?"#94a3b8":"linear-gradient(135deg,#1a3a6b,#0f2347)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700}},sending?"Guardando...":"Guardar ✓")));
+          h('button',{onClick:save,disabled:sending,style:{flex:2,padding:"12px",background:sending?"#94a3b8":"linear-gradient(135deg,#1a3a6b,#0f2347)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700}},sending?"Guardando...":"Guardar ✓"))));
 }
 
 // ── PANEL CONFIG ───────────────────────────────────────────────────────────
@@ -1725,7 +1784,7 @@ function PanelConfig({onClose, onSaveEjecutores, area}) {
           h('div',{style:{height:1,background:"#f1f5f9",marginBottom:16}}),
           h('div',{style:{fontSize:13,fontWeight:700,color:"#1a3a6b",marginBottom:4}},"📋 Responsables y directivos por área"),
           h('div',{style:{fontSize:12,color:"#64748b",marginBottom:14}},"Configurá para cada tipo de problema quiénes reciben los mails y escalados."),
-          ...Object.values(CATS).map(cat=>h('div',{key:cat.id,style:{marginBottom:16,background:"#f8fafc",borderRadius:12,padding:"14px 16px"}},
+          ...Object.values(CATS).filter(cat=>area==="administracion"?CATS_ADMINISTRACION.includes(cat.id):CATS_INTENDENCIA.includes(cat.id)).map(cat=>h('div',{key:cat.id,style:{marginBottom:16,background:"#f8fafc",borderRadius:12,padding:"14px 16px"}},
             h('div',{style:{fontSize:13,fontWeight:700,color:"#1a3a6b",marginBottom:10}},cat.icon+" "+cat.label),
             h('div',{style:{marginBottom:10}},
               h('div',{style:{fontSize:11,fontWeight:600,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:0.5}},"Responsables (reciben nuevos reclamos y recordatorios)"),
@@ -2911,10 +2970,7 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
         h('div',{style:{fontSize:11,color:"#60a5fa",letterSpacing:2,textTransform:"uppercase"}},"Panel de "+(area==="administracion"?"Administración":"Intendencia")+" — Asturiano"),
         h('h1',{style:{fontFamily:"'Playfair Display',serif",color:"white",fontSize:22,margin:0}},"Intendencia — Asturiano")),
       h('div',{style:{display:"flex",gap:8}},
-        h('button',{onClick:()=>setShowCfg(true),style:{padding:"8px 14px",background:"rgba(255,255,255,0.1)",color:"white",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600}},"⚙️ Configuración"),
-
-        h('button',{onClick:()=>{const d=prompt("Simular cuántos días transcurridos (ej: 4):");if(d&&!isNaN(d))testAlerts(Number(d));},style:{padding:"8px 14px",background:"rgba(255,255,255,0.1)",color:"white",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600}},"🧪 Test"),
-        h('button',{onClick:checkAlerts,disabled:checking,style:{padding:"8px 14px",background:checking?"#475569":"#f97316",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600}},checking?"Verificando...":"⚠️ Revisar alertas"))),
+        h('button',{onClick:()=>setShowCfg(true),style:{padding:"8px 14px",background:"rgba(255,255,255,0.1)",color:"white",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600}},"⚙️ Configuración"))),
     // Main tabs: Reclamos | Proyectos
     h('div',{className:"main-tabs",style:{display:"flex",gap:4,padding:"0 24px",background:"#1a3a6b",borderBottom:"2px solid rgba(255,255,255,0.1)"}},
       ...[["reclamos","📋 Solicitudes"],["proyectos","🏗️ Proyectos"],["recurrencias","🔁 Recurrencias"]].map(([id,lbl])=>
@@ -3178,7 +3234,7 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
 
 // ── LOGIN ──────────────────────────────────────────────────────────────────
 function Login({onLogin, area}) {
-  const [p,setP] = useState(""); const [err,setErr] = useState(false);
+  const [p,setP] = useState(""); const [err,setErr] = useState(false); const [showPwd,setShowPwd] = useState(false);
   const pass = area==="intendencia" ? PASS_INTENDENCIA : area==="administracion" ? PASS_ADMINISTRACION : PASS_DASHBOARD;
   const areaLabel = area==="intendencia" ? "Intendencia" : "Administración";
   const areaIcon = area==="intendencia" ? "🔧" : "📊";
@@ -3189,8 +3245,10 @@ function Login({onLogin, area}) {
       h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:22,margin:"0 0 6px"}},"Panel de "+areaLabel+" — Asturiano"),
       h('div',{style:{background:"#fef9c3",border:"1.5px solid #fde047",borderRadius:8,padding:"8px 12px",marginBottom:16,fontSize:12,color:"#713f12"}},"🔒 Esta sección es de uso interno del club. Si sos socio, usá el formulario de solicitudes."),
       h('p',{style:{color:"#64748b",fontSize:14,marginBottom:24}},"Ingresá la contraseña para acceder"),
-      h('input',{type:"password",value:p,onChange:e=>setP(e.target.value),onKeyDown:e=>e.key==="Enter"&&go(),placeholder:"Contraseña",
-        style:{width:"100%",padding:"12px 14px",borderRadius:10,border:err?"2px solid #ef4444":"2px solid #e2e8f0",fontSize:15,outline:"none",marginBottom:12,boxSizing:"border-box"}}),
+      h('div',{style:{position:"relative",marginBottom:12}},
+        h('input',{type:showPwd?"text":"password",value:p,onChange:e=>setP(e.target.value),onKeyDown:e=>e.key==="Enter"&&go(),placeholder:"Contraseña",
+          style:{width:"100%",padding:"12px 44px 12px 14px",borderRadius:10,border:err?"2px solid #ef4444":"2px solid #e2e8f0",fontSize:15,outline:"none",boxSizing:"border-box"}}),
+        h('button',{onClick:()=>setShowPwd(!showPwd),style:{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:18,color:"#64748b",padding:4,lineHeight:1}},showPwd?"🙈":"👁️")),
       err && h('div',{style:{color:"#ef4444",fontSize:13,marginBottom:8}},"Contraseña incorrecta"),
       h('button',{onClick:go,style:{width:"100%",padding:"13px",background:"linear-gradient(135deg,#1a3a6b,#0f2347)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:15,fontWeight:700}},"Ingresar →")));
 }
@@ -4738,6 +4796,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
+
 
 
 
